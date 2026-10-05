@@ -46,3 +46,4 @@ prisma/dev.db*
 
 # logs
 *.log
+.env.production
