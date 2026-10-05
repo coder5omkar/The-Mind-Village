@@ -1,0 +1,188 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 224 44% 5%;
+    --foreground: 214 32% 91%;
+    --card: 223 40% 8%;
+    --card-foreground: 214 32% 91%;
+    --primary: 42 90% 56%;
+    --primary-foreground: 32 100% 16%;
+    --secondary: 222 30% 14%;
+    --secondary-foreground: 214 30% 88%;
+    --muted: 222 28% 13%;
+    --muted-foreground: 217 16% 62%;
+    --accent: 222 30% 16%;
+    --accent-foreground: 214 30% 90%;
+    --border: 222 26% 17%;
+    --input: 222 26% 17%;
+    --ring: 42 90% 56%;
+    --radius: 0.9rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-night-900 text-slate-200 antialiased;
+    background-image: radial-gradient(
+        1200px 700px at 12% -10%,
+        rgba(99, 102, 241, 0.2),
+        transparent 60%
+      ),
+      radial-gradient(
+        1000px 600px at 92% 0%,
+        rgba(56, 189, 248, 0.12),
+        transparent 55%
+      ),
+      radial-gradient(
+        900px 800px at 50% 115%,
+        rgba(74, 138, 58, 0.2),
+        transparent 60%
+      ),
+      radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1.4px);
+    background-size: auto, auto, auto, 260px 260px;
+    background-attachment: fixed;
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background: rgba(244, 197, 66, 0.35);
+  }
+}
+
+@layer components {
+  /* Chunky game panel */
+  .game-panel {
+    @apply relative rounded-2xl border-2 border-black/50 text-card-foreground shadow-panel;
+    background-image: linear-gradient(180deg, #1c2a4c 0%, #121a30 100%);
+  }
+  .game-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    pointer-events: none;
+  }
+
+  .game-panel-gold {
+    @apply relative rounded-2xl border-2 border-gold-600/80 text-card-foreground shadow-panel;
+    background-image: linear-gradient(180deg, #22304f 0%, #121a30 100%);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 0 3px rgba(244, 197, 66, 0.08);
+  }
+
+  /* Small glossy HUD pill */
+  .hud-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border-2 border-black/40 px-3 py-1 text-xs font-bold text-slate-200 shadow-chip;
+    background-image: linear-gradient(180deg, #243356 0%, #16203a 100%);
+  }
+
+  /* Grass playing field for the village map */
+  .grass-field {
+    background-color: #2f6330;
+    background-image: radial-gradient(
+        circle at 25% 20%,
+        rgba(255, 255, 255, 0.06) 1px,
+        transparent 1.6px
+      ),
+      radial-gradient(
+        circle at 75% 60%,
+        rgba(0, 0, 0, 0.1) 1.5px,
+        transparent 2px
+      ),
+      radial-gradient(
+        circle at 50% 85%,
+        rgba(255, 255, 255, 0.05) 1px,
+        transparent 1.4px
+      );
+    background-size: 46px 46px, 60px 60px, 34px 34px;
+  }
+
+  .title-gold {
+    @apply font-display text-gold-300;
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 0 24px rgba(244, 197, 66, 0.25);
+  }
+
+  .text-shadow-hard {
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+  }
+
+  /* Parchment-ish text area */
+  .scroll-input {
+    @apply rounded-xl border-2 border-black/50 bg-[#0d1526]/90 shadow-[inset_0_2px_8px_rgba(0,0,0,0.5)];
+  }
+
+  /* Map: name plates and power bars fade away when zoomed far out so the
+     villager portraits stay readable at every zoom level. */
+  .villager-name,
+  .villager-power {
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  .map-far .villager-name,
+  .map-far .villager-power {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  .map-far .react-flow__handle {
+    opacity: 0;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply border border-white/5 bg-white/[0.03] backdrop-blur-md;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #3b4d78, #24304d);
+  border: 2px solid #0b1226;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #4a5f91, #2c3a5c);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* React Flow theming */
+.react-flow__attribution {
+  display: none;
+}
+.react-flow__controls {
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+.react-flow__controls button {
+  background: linear-gradient(180deg, #243356, #16203a);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.4);
+  color: #e2e8f0;
+}
+.react-flow__controls button:hover {
+  background: linear-gradient(180deg, #2d3f68, #1b2745);
+}
+.react-flow__minimap {
+  background: rgba(7, 12, 26, 0.85) !important;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  overflow: hidden;
+}
