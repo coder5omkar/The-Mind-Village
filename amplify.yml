@@ -7,9 +7,9 @@ frontend:
         - npx prisma generate
     build:
       # Amplify does not pass console environment variables to the Next.js
-      # server runtime by default. Writing them into .env.production makes
-      # them available to server components, API routes and SSR at runtime.
-      - env | grep -e DATABASE_URL -e NEXTAUTH_URL -e NEXTAUTH_SECRET -e GOOGLE_CLIENT_ID -e GOOGLE_CLIENT_SECRET -e JEV_API_KEY -e DEEPSEEK_API_KEY -e JEV_API_URL -e JEV_MODEL -e DEEPSEEK_BASE_URL -e DEEPSEEK_MODEL >> .env.production
+      # server runtime by default. The script writes them into .env.production
+      # so server components, API routes and SSR can read them at runtime.
+      - bash scripts/amplify-env.sh
       - npm run build
   artifacts:
     baseDirectory: .next
