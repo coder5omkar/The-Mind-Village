@@ -46,7 +46,7 @@ export function timeAgo(date: Date | string) {
   return `${rounded} ${unit}${rounded === 1 ? "" : "s"} ago`;
 }
 
-/** "The Social Man" -> "SM", "The Thinker" -> "T" (for portrait circles). */
+/** "The Image-Conscious Mind" -> "IM", "The Thinking Mind" -> "TM" (portrait circles). */
 export function initials(name: string) {
   return name
     .replace(/^The\s+/i, "")

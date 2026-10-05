@@ -6,7 +6,8 @@ import { districtColor } from "@/lib/residents";
 import { cn, initials } from "@/lib/utils";
 
 // Every villager gets a real illustrated portrait. Avatars are deterministic
-// (seeded by the resident name), so "The Critic" always looks like The Critic.
+// (seeded by the resident name), so "The Judging Mind" always looks like
+// The Judging Mind.
 // If the image service is unreachable, we fall back to initials.
 
 export function villagerAvatarUrl(name: string, district: string) {

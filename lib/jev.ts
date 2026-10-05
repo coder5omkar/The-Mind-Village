@@ -17,8 +17,10 @@
 
 import {
   buildReasoning,
+  neighborReason,
   pickAction,
   safetyNote,
+  type NeighborSuggestion,
   type Prediction,
 } from "./predictor";
 import type { ResidentLite, SuggestedAction } from "./residents";
@@ -77,25 +79,13 @@ export function buildJevRequest(thought: string, residents: ResidentLite[]) {
       surrounding_1: {
         type: "choice",
         instructions:
-          "Which resident stands closest to the primary one - the most likely co-active neighbor? Always choose the single best resident.",
+          "Which resident stands closest to the primary one - the most likely co-active neighbour? Always choose the single best resident.",
         criteria: surroundCriteria,
       },
       surrounding_2: {
         type: "choice",
         instructions:
-          "Which other resident is often pulled in when the primary one speaks? Choose a different resident than the closest neighbor. Always choose one.",
-        criteria: surroundCriteria,
-      },
-      surrounding_3: {
-        type: "choice",
-        instructions:
-          "Which resident pushes, provokes or competes with the primary one? Always choose one.",
-        criteria: surroundCriteria,
-      },
-      surrounding_4: {
-        type: "choice",
-        instructions:
-          "Which resident calms, protects or balances the primary one? Always choose one.",
+          "Which resident sits on the other side of the primary one - the one that steadies or challenges it? Always choose one.",
         criteria: surroundCriteria,
       },
       suggested_action: {
@@ -138,7 +128,7 @@ export function buildJevFillRequest(
       fill_1: {
         type: "choice",
         instructions: ask(
-          "Which resident is often active together with the primary one?"
+          "Which other resident is often active together with the primary one?"
         ),
         criteria,
       },
@@ -146,13 +136,6 @@ export function buildJevFillRequest(
         type: "choice",
         instructions: ask(
           "Which resident quietly influences the primary one from the background?"
-        ),
-        criteria,
-      },
-      fill_3: {
-        type: "choice",
-        instructions: ask(
-          "Which resident sits on the opposite side - the one the primary pushes against or learns from?"
         ),
         criteria,
       },
@@ -196,29 +179,51 @@ function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-/** Pull distinct surrounder names out of any Jev body (primary or fill pass). */
-function collectSurrounderNames(
+type CollectedNeighbor = {
+  resident: ResidentLite;
+  confidence: number;
+  angle: "closest" | "balance" | "related";
+};
+
+/** Pull distinct surrounding residents (score + angle) from any Jev body. */
+function collectSurrounders(
   body: unknown,
   residents: ResidentLite[],
   excludedSlugs: Set<string>,
   excludedNames: Set<string>
-) {
+): CollectedNeighbor[] {
   const answers = extractAnswers(body);
   if (!answers) return [];
   const bySlug = new Map(
     residents.map((resident) => [slugifyResident(resident.name), resident])
   );
-  const names: string[] = [];
+  const collected: CollectedNeighbor[] = [];
   for (const key of Object.keys(answers)) {
     if (!key.startsWith("surrounding") && !key.startsWith("fill")) continue;
-    const choice = answers[key]?.choice;
+    const answer = answers[key];
+    const choice = answer?.choice;
     if (!choice || choice === "none") continue;
     const resident = bySlug.get(choice);
     if (!resident) continue;
     if (excludedSlugs.has(choice) || excludedNames.has(resident.name)) continue;
-    if (!names.includes(resident.name)) names.push(resident.name);
+    if (collected.some((entry) => entry.resident.id === resident.id)) continue;
+    collected.push({
+      resident,
+      confidence: round2(
+        clamp(
+          answer.probabilities?.[choice] ?? answer.confidence ?? 0.4,
+          0.05,
+          0.95
+        )
+      ),
+      angle: key.startsWith("fill")
+        ? "related"
+        : key === "surrounding_1"
+          ? "closest"
+          : "balance",
+    });
   }
-  return names;
+  return collected;
 }
 
 export function mapJevResponse(
@@ -251,13 +256,20 @@ export function mapJevResponse(
 
   const secondary: { name: string; confidence: number }[] = [];
 
-  // Surrounding residents: deduped, never the primary itself.
-  const neighborNames = collectSurrounderNames(
+  // Surrounding residents: deduped, best scored first, each with a reason.
+  const neighbors: NeighborSuggestion[] = collectSurrounders(
     body,
     residents,
     new Set([primaryAnswer.choice ?? ""]),
     new Set([primary.name])
-  );
+  )
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 2)
+    .map((entry) => ({
+      name: entry.resident.name,
+      confidence: entry.confidence,
+      reason: neighborReason(primary, entry.resident, entry.angle),
+    }));
 
   const action = isAction(answers.suggested_action?.choice)
     ? (answers.suggested_action?.choice as SuggestedAction)
@@ -277,7 +289,7 @@ export function mapJevResponse(
     primary_resident: primary.name,
     confidence,
     secondary_residents: secondary,
-    neighbors: neighborNames,
+    neighbors,
     suggested_action: action,
     reasoning,
   };
@@ -342,27 +354,40 @@ export async function analyzeWithJev(
     return null;
   }
 
-  // The four surrounding questions are evaluated in parallel, so Jev can
-  // repeat the same resident. Follow-up "fill" calls explicitly exclude the
-  // already chosen names until the circle has four distinct residents.
+  // The two surrounding questions run in parallel, so Jev can repeat the same
+  // resident. Follow-up "fill" calls explicitly exclude the already chosen
+  // names until we have two distinct neighbours.
   let attempts = 0;
-  while (prediction.neighbors.length < 4 && attempts < 2) {
+  while (prediction.neighbors.length < 2 && attempts < 2) {
     attempts += 1;
-    const chosen = [prediction.primary_resident, ...prediction.neighbors];
+    const chosen = [
+      prediction.primary_resident,
+      ...prediction.neighbors.map((neighbor) => neighbor.name),
+    ];
     const fillBody = await callJev(
       buildJevFillRequest(thought, residents, chosen),
       endpoint,
       apiKey
     );
     if (!fillBody) break;
-    const extra = collectSurrounderNames(
+    const primaryResident = residents.find(
+      (resident) => resident.name === prediction.primary_resident
+    );
+    if (!primaryResident) break;
+    const extra: NeighborSuggestion[] = collectSurrounders(
       fillBody,
       residents,
       new Set(chosen.map(slugifyResident)),
       new Set(chosen)
-    );
+    ).map((entry) => ({
+      name: entry.resident.name,
+      confidence: entry.confidence,
+      reason: neighborReason(primaryResident, entry.resident, entry.angle),
+    }));
     if (extra.length === 0) break;
-    prediction.neighbors = [...prediction.neighbors, ...extra].slice(0, 4);
+    prediction.neighbors = [...prediction.neighbors, ...extra]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 2);
   }
 
   return prediction;

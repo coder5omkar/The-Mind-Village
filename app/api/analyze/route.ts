@@ -57,16 +57,27 @@ export async function POST(req: Request) {
     )
     .slice(0, 3);
 
-  // Surrounding residents suggested by the engine - the user approves each
-  // one before it becomes a bond in their own village. No predefined graph.
-  const neighborMap = new Map<string, Resident>();
-  for (const name of prediction.neighbors) {
-    const resident = byName.get(name);
-    if (resident && resident.id !== primary.id && neighborMap.size < 4) {
-      neighborMap.set(resident.id, resident);
-    }
-  }
-  const neighbors = Array.from(neighborMap.values());
+  // Surrounding residents suggested by the engine (max 2, best scored first) -
+  // the user approves each one before it becomes a bond. No predefined graph.
+  const neighbors = prediction.neighbors
+    .map((suggestion) => {
+      const resident = byName.get(suggestion.name);
+      return resident && resident.id !== primary.id
+        ? {
+            resident,
+            confidence: suggestion.confidence,
+            reason: suggestion.reason,
+          }
+        : null;
+    })
+    .filter(
+      (
+        entry
+      ): entry is { resident: Resident; confidence: number; reason: string } =>
+        entry !== null
+    )
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 2);
 
   const thought = await prisma.thought.create({
     data: {
@@ -78,11 +89,13 @@ export async function POST(req: Request) {
         name: s.name,
         confidence: s.confidence,
       })),
-      neighbors: neighbors.map((n) => ({
-        id: n.id,
-        name: n.name,
-        district: n.district,
+      neighbors: neighbors.map((entry) => ({
+        id: entry.resident.id,
+        name: entry.resident.name,
+        district: entry.resident.district,
         status: "pending",
+        confidence: entry.confidence,
+        reason: entry.reason,
       })),
       suggestedAction: prediction.suggested_action,
       reasoning: prediction.reasoning,
@@ -93,7 +106,10 @@ export async function POST(req: Request) {
   // Activity gently charges the residents that showed up.
   await bumpMany(user.id, [
     { residentId: primary.id, delta: 0.05 },
-    ...neighbors.map((n) => ({ residentId: n.id, delta: 0.02 })),
+    ...neighbors.map((entry) => ({
+      residentId: entry.resident.id,
+      delta: 0.02,
+    })),
   ]);
 
   return NextResponse.json({
@@ -105,7 +121,7 @@ export async function POST(req: Request) {
       confidence: s.confidence,
       resident: residentLite(s.resident),
     })),
-    neighbors: neighbors.map(residentLite),
+    neighbors: neighbors.map((entry) => residentLite(entry.resident)),
     source,
   });
 }

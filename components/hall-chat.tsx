@@ -26,6 +26,8 @@ type Surrounder = {
   name: string;
   district?: string;
   status?: string;
+  confidence?: number;
+  reason?: string;
 };
 
 type VillageMessage = {
@@ -355,15 +357,18 @@ export function HallChat({
                 {message.surrounders.length > 0 ? (
                   <div className="mt-2">
                     <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                      Surrounding residents - build your village
+                      Suggested neighbours - best match first
                     </p>
                     <div className="mt-1.5 space-y-1.5">
-                      {message.surrounders.map((surrounder) => (
+                      {message.surrounders.map((surrounder, index) => (
                         <div
                           key={surrounder.id ?? surrounder.name}
                           className="rounded-lg border border-black/30 bg-black/20 px-2 py-1.5"
                         >
                           <div className="flex items-center gap-2">
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-gold-700 bg-gradient-to-b from-gold-300 to-gold-500 font-display text-[8px] text-[#3d2500]">
+                              {index + 1}
+                            </span>
                             <VillagerPortrait
                               name={surrounder.name}
                               district={surrounder.district ?? ""}
@@ -373,6 +378,11 @@ export function HallChat({
                             <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-200">
                               {surrounder.name}
                             </span>
+                            {surrounder.confidence != null ? (
+                              <span className="shrink-0 text-[9px] font-bold text-gold-200">
+                                {Math.round(surrounder.confidence * 100)}%
+                              </span>
+                            ) : null}
                             {surrounder.status === "agreed" ? (
                               <span className="shrink-0 text-[9px] font-bold text-emerald-300">
                                 ✓ in your village
@@ -387,6 +397,11 @@ export function HallChat({
                               </span>
                             ) : null}
                           </div>
+                          {surrounder.reason ? (
+                            <p className="mt-1 pl-6 font-serif text-[10px] italic leading-relaxed text-slate-400">
+                              {surrounder.reason}
+                            </p>
+                          ) : null}
                           {surrounder.status !== "agreed" &&
                           surrounder.status !== "rejected" ? (
                             <div className="mt-1 flex gap-1">

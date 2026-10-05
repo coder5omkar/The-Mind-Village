@@ -1,6 +1,24 @@
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+// Allow running this script directly (npx tsx prisma/seed.ts) as well as
+// through `prisma db seed` (which already loads .env).
+try {
+  (
+    process as unknown as { loadEnvFile?: (path: string) => void }
+  ).loadEnvFile?.(".env");
+} catch {
+  // ignore
+}
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set");
+}
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString }),
+});
 
 type SeedResident = {
   name: string;
@@ -11,77 +29,79 @@ type SeedResident = {
 
 // ---------------------------------------------------------------------------
 // The complete village - 79 residents across 11 districts.
+// Names describe psychological STATES (not social roles), so a reading like
+// "The Comparing Mind, shadow mode" is instantly recognizable.
 // Relationships are NOT predefined: every user builds their own village by
 // agreeing (or disagreeing) with the surrounding residents Jev suggests.
 // ---------------------------------------------------------------------------
 
 const RESIDENTS: SeedResident[] = [
   // COGNITIVE
-  { name: "The Thinker", district: "Cognitive", function: "Analyzes, reflects", shadow: "Overthinking, paralysis" },
-  { name: "The Philosopher", district: "Cognitive", function: "Seeks meaning, patterns", shadow: "Detachment, nihilism" },
-  { name: "The Learner", district: "Cognitive", function: "Curious, grows", shadow: "Perfectionism, never enough" },
-  { name: "The Planner", district: "Cognitive", function: "Organizes future", shadow: "Anxiety, control" },
-  { name: "The Analyst", district: "Cognitive", function: "Breaks down problems", shadow: "Coldness, over-calculation" },
-  { name: "The Strategist", district: "Cognitive", function: "Long-term thinking", shadow: "Manipulation" },
-  { name: "The Problem-Solver", district: "Cognitive", function: "Fixes things", shadow: "Can't rest" },
-  { name: "The Questioner", district: "Cognitive", function: "Asks why", shadow: "Doubt, cynicism" },
+  { name: "The Thinking Mind", district: "Cognitive", function: "Analyzes, reflects", shadow: "Overthinking, paralysis" },
+  { name: "The Meaning-Seeking Mind", district: "Cognitive", function: "Seeks meaning, patterns", shadow: "Detachment, nihilism" },
+  { name: "The Growing Mind", district: "Cognitive", function: "Curious, grows", shadow: "Perfectionism, never enough" },
+  { name: "The Planning Mind", district: "Cognitive", function: "Organizes future", shadow: "Anxiety, control" },
+  { name: "The Dissecting Mind", district: "Cognitive", function: "Breaks down problems", shadow: "Coldness, over-calculation" },
+  { name: "The Long-Game Mind", district: "Cognitive", function: "Long-term thinking", shadow: "Manipulation" },
+  { name: "The Fixing Mind", district: "Cognitive", function: "Fixes things", shadow: "Can't rest" },
+  { name: "The Doubting Mind", district: "Cognitive", function: "Asks why", shadow: "Doubt, cynicism" },
 
   // PROFESSIONAL
-  { name: "The Employee", district: "Professional", function: "Does the work, earns", shadow: "Fear of job loss, blame" },
-  { name: "The Topper", district: "Professional", function: "Achieves, competes", shadow: "Comparison, never 1st enough" },
-  { name: "The Genius", district: "Professional", function: "Creates, innovates", shadow: "Needs recognition" },
-  { name: "The Professional", district: "Professional", function: "Delivers, reliable", shadow: "Burnout" },
-  { name: "The Leader", district: "Professional", function: "Guides others", shadow: "Ego, control" },
-  { name: "The Follower", district: "Professional", function: "Supports, cooperates", shadow: "Passivity" },
-  { name: "The Entrepreneur", district: "Professional", function: "Builds, risks", shadow: "Greed, overreach" },
-  { name: "The Craftsman", district: "Professional", function: "Masters skill", shadow: "Perfectionism" },
+  { name: "The Duty-Bound Mind", district: "Professional", function: "Does the work, earns", shadow: "Fear of job loss, blame" },
+  { name: "The Comparing Mind", district: "Professional", function: "Achieves, competes", shadow: "Comparison, never 1st enough" },
+  { name: "The Needing-to-Shine Mind", district: "Professional", function: "Creates, innovates", shadow: "Needs recognition" },
+  { name: "The Standard-Keeping Mind", district: "Professional", function: "Delivers, reliably", shadow: "Burnout" },
+  { name: "The Steering Mind", district: "Professional", function: "Guides others", shadow: "Ego, control" },
+  { name: "The Yielding Mind", district: "Professional", function: "Supports, cooperates", shadow: "Passivity" },
+  { name: "The Risk-Taking Mind", district: "Professional", function: "Builds, risks", shadow: "Greed, overreach" },
+  { name: "The Perfecting Mind", district: "Professional", function: "Masters skill", shadow: "Perfectionism" },
 
   // MONEY
-  { name: "The Trader", district: "Money", function: "Calculates worth", shadow: "Gambling, greed" },
-  { name: "The Gambler", district: "Money", function: "Chases risk", shadow: "Ruin, addiction" },
-  { name: "The Saver", district: "Money", function: "Protects, conserves", shadow: "Hoarding, fear" },
-  { name: "The Spender", district: "Money", function: "Enjoys, consumes", shadow: "Impulse, waste" },
-  { name: "The Investor", district: "Money", function: "Grows wealth", shadow: "Impatience" },
-  { name: "The Debtor", district: "Money", function: "Owes, repays", shadow: "Shame, fear" },
-  { name: "The Provider", district: "Money", function: "Feeds family", shadow: "Burden, exhaustion" },
+  { name: "The Calculating Mind", district: "Money", function: "Calculates worth", shadow: "Gambling, greed" },
+  { name: "The Risk-Chasing Mind", district: "Money", function: "Chases risk", shadow: "Ruin, addiction" },
+  { name: "The Hoarding Mind", district: "Money", function: "Protects, conserves", shadow: "Fear of loss, rigidity" },
+  { name: "The Craving Mind", district: "Money", function: "Enjoys, consumes", shadow: "Impulse, waste" },
+  { name: "The Compounding Mind", district: "Money", function: "Grows wealth", shadow: "Impatience" },
+  { name: "The Owing Mind", district: "Money", function: "Owes, repays", shadow: "Shame, fear" },
+  { name: "The Carrying Mind", district: "Money", function: "Feeds family", shadow: "Burden, exhaustion" },
 
   // RELATIONAL
-  { name: "The Friend", district: "Relational", function: "Connects, supports", shadow: "Loss, grief" },
-  { name: "The Lover", district: "Relational", function: "Bonds, desires", shadow: "Obsession, jealousy" },
-  { name: "The Family Man", district: "Relational", function: "Cares for kin", shadow: "Duty, resentment" },
-  { name: "The Son", district: "Relational", function: "Honors parents", shadow: "Guilt, obligation" },
-  { name: "The Husband", district: "Relational", function: "Partners", shadow: "Distance, unmet needs" },
+  { name: "The Connecting One", district: "Relational", function: "Connects, supports", shadow: "Loss, grief" },
+  { name: "The Bonding One", district: "Relational", function: "Bonds, desires", shadow: "Obsession, jealousy" },
+  { name: "The Kin-Keeper", district: "Relational", function: "Cares for kin", shadow: "Duty, resentment" },
+  { name: "The Obedient One", district: "Relational", function: "Honors parents", shadow: "Guilt, obligation" },
+  { name: "The Partnering One", district: "Relational", function: "Partners", shadow: "Distance, unmet needs" },
   { name: "The Parent", district: "Relational", function: "Nurtures", shadow: "Worry, control" },
-  { name: "The Social Man", district: "Relational", function: "Belongs, status", shadow: "Comparison, image" },
-  { name: "The Lonely One", district: "Relational", function: "Seeks connection", shadow: "Isolation, despair" },
-  { name: "The Helper", district: "Relational", function: "Serves others", shadow: "Martyrdom" },
+  { name: "The Image-Conscious Mind", district: "Relational", function: "Belongs, status", shadow: "Comparison, image" },
+  { name: "The Longing One", district: "Relational", function: "Seeks connection", shadow: "Isolation, despair" },
+  { name: "The Rescuing Mind", district: "Relational", function: "Serves others", shadow: "Martyrdom" },
 
   // EMOTIONAL
   { name: "The Happy One", district: "Emotional", function: "Joy, lightness", shadow: "Avoidance" },
-  { name: "The Sad One", district: "Emotional", function: "Grief, release", shadow: "Depression" },
+  { name: "The Grieving One", district: "Emotional", function: "Grief, release", shadow: "Depression" },
   { name: "The Angry One", district: "Emotional", function: "Boundary, fire", shadow: "Rage, destruction" },
   { name: "The Fearful One", district: "Emotional", function: "Caution, safety", shadow: "Paralysis, anxiety" },
-  { name: "The Depressive", district: "Emotional", function: "Rest, withdrawal", shadow: "Hopelessness" },
-  { name: "The Anxious One", district: "Emotional", function: "Anticipates threat", shadow: "Chronic worry" },
+  { name: "The Heavy One", district: "Emotional", function: "Rest, withdrawal", shadow: "Hopelessness" },
+  { name: "The Threat-Scanning Mind", district: "Emotional", function: "Anticipates threat", shadow: "Chronic worry" },
   { name: "The Content One", district: "Emotional", function: "Peace, enough", shadow: "Complacency" },
   { name: "The Envious One", district: "Emotional", function: "Comparison, desire", shadow: "Resentment" },
   { name: "The Guilty One", district: "Emotional", function: "Conscience", shadow: "Shame, self-punishment" },
   { name: "The Ashamed One", district: "Emotional", function: "Social awareness", shadow: "Self-hatred" },
 
   // CREATIVE
-  { name: "The Artist", district: "Creative", function: "Creates beauty", shadow: "Insecurity" },
-  { name: "The Writer", district: "Creative", function: "Expresses, records", shadow: "Block, self-doubt" },
-  { name: "The Musician", district: "Creative", function: "Feels rhythm", shadow: "Mood swings" },
-  { name: "The Builder", district: "Creative", function: "Makes things", shadow: "Obsession" },
-  { name: "The Dreamer", district: "Creative", function: "Imagines", shadow: "Escapism" },
-  { name: "The Player", district: "Creative", function: "Plays, enjoys", shadow: "Avoidance" },
+  { name: "The Beauty-Making Mind", district: "Creative", function: "Creates beauty", shadow: "Insecurity" },
+  { name: "The Expressing Mind", district: "Creative", function: "Expresses, records", shadow: "Block, self-doubt" },
+  { name: "The Rhythmic Mind", district: "Creative", function: "Feels rhythm", shadow: "Mood swings" },
+  { name: "The Making Mind", district: "Creative", function: "Makes things", shadow: "Obsession" },
+  { name: "The Imagining Mind", district: "Creative", function: "Imagines", shadow: "Escapism" },
+  { name: "The Playing One", district: "Creative", function: "Plays, enjoys", shadow: "Avoidance" },
 
   // BODY
-  { name: "The Athlete", district: "Body", function: "Moves, trains", shadow: "Injury, exhaustion" },
-  { name: "The Sleeper", district: "Body", function: "Restores", shadow: "Lethargy" },
-  { name: "The Eater", district: "Body", function: "Nourishes", shadow: "Binge, restriction" },
-  { name: "The Addict", district: "Body", function: "Seeks relief", shadow: "Destruction" },
-  { name: "The Healthy One", district: "Body", function: "Maintains", shadow: "Rigidity" },
+  { name: "The Training Mind", district: "Body", function: "Moves, trains", shadow: "Injury, exhaustion" },
+  { name: "The Resting One", district: "Body", function: "Restores", shadow: "Lethargy" },
+  { name: "The Nourishing One", district: "Body", function: "Nourishes", shadow: "Binge, restriction" },
+  { name: "The Numbing Mind", district: "Body", function: "Seeks relief", shadow: "Destruction" },
+  { name: "The Maintaining One", district: "Body", function: "Maintains", shadow: "Rigidity" },
   { name: "The Sensitive One", district: "Body", function: "Feels body", shadow: "Overwhelm" },
 
   // SPIRITUAL
@@ -94,20 +114,20 @@ const RESIDENTS: SeedResident[] = [
 
   // PRIMAL
   { name: "The Survivor", district: "Primal", function: "Fights, endures", shadow: "Hypervigilance" },
-  { name: "The Hunter", district: "Primal", function: "Pursues, provides", shadow: "Aggression" },
+  { name: "The Pursuing One", district: "Primal", function: "Pursues, provides", shadow: "Aggression" },
   { name: "The Protector", district: "Primal", function: "Defends", shadow: "Paranoia" },
-  { name: "The Prey", district: "Primal", function: "Flees, hides", shadow: "Victimhood" },
-  { name: "The Beast", district: "Primal", function: "Raw instinct", shadow: "Violence, lust" },
+  { name: "The Fleeing One", district: "Primal", function: "Flees, hides", shadow: "Victimhood" },
+  { name: "The Instinctive One", district: "Primal", function: "Raw instinct", shadow: "Violence, lust" },
   { name: "The Child", district: "Primal", function: "Innocent, playful", shadow: "Vulnerability, fear" },
 
   // DESTRUCTIVE
-  { name: "The Saboteur", district: "Destructive", function: "Self-sabotage", shadow: "" },
-  { name: "The Critic", district: "Destructive", function: "Constant judgment", shadow: "" },
-  { name: "The Cynic", district: "Destructive", function: "Bitterness", shadow: "" },
-  { name: "The Manipulator", district: "Destructive", function: "Control", shadow: "" },
-  { name: "The Liar", district: "Destructive", function: "Deception", shadow: "" },
-  { name: "The Coward", district: "Destructive", function: "Avoidance", shadow: "" },
-  { name: "The Tyrant", district: "Destructive", function: "Domination", shadow: "" },
+  { name: "The Self-Undoing Mind", district: "Destructive", function: "Self-sabotage", shadow: "" },
+  { name: "The Judging Mind", district: "Destructive", function: "Constant judgment", shadow: "" },
+  { name: "The Bitter Mind", district: "Destructive", function: "Bitterness", shadow: "" },
+  { name: "The Steering-Others Mind", district: "Destructive", function: "Control", shadow: "" },
+  { name: "The Hiding Mind", district: "Destructive", function: "Deception", shadow: "" },
+  { name: "The Avoiding Mind", district: "Destructive", function: "Avoidance", shadow: "" },
+  { name: "The Dominating Mind", district: "Destructive", function: "Domination", shadow: "" },
 
   // HIGHER
   { name: "The Wise One", district: "Higher", function: "Sees clearly", shadow: "" },

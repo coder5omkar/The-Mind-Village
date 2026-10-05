@@ -4,7 +4,7 @@
 // Returns null on any failure so the engine can fall back gracefully.
 
 import OpenAI from "openai";
-import type { Prediction } from "./predictor";
+import { neighborReason, type Prediction } from "./predictor";
 import type { ResidentLite, SuggestedAction } from "./residents";
 import { clamp } from "./utils";
 
@@ -77,9 +77,14 @@ function sanitizePrediction(
 
   const neighbors = Array.isArray(data.neighbors)
     ? data.neighbors
-        .map((name) => byLower.get(String(name).trim().toLowerCase())?.name)
-        .filter((name): name is string => Boolean(name))
-        .slice(0, 5)
+        .map((name) => byLower.get(String(name).trim().toLowerCase()))
+        .filter((resident): resident is ResidentLite => Boolean(resident))
+        .slice(0, 2)
+        .map((resident) => ({
+          name: resident.name,
+          confidence: 0.5,
+          reason: neighborReason(primary, resident, "related"),
+        }))
     : [];
 
   const action = isAction(data.suggested_action)

@@ -90,7 +90,7 @@ export function AppHeader({ user, isGuest, level, streak, total }: Props) {
         </nav>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          <ThemeSwitcher className="hidden md:flex" />
+          <ThemeSwitcher className="hidden sm:flex" />
           <div
             className="hud-chip hidden md:inline-flex"
             title={`${level.title} - ${level.xp}/${level.xpNeeded} XP to next level`}
@@ -167,6 +167,7 @@ export function AppHeader({ user, isGuest, level, streak, total }: Props) {
             className="flex-1"
           />
         ))}
+        <ThemeSwitcher className="ml-auto shrink-0" />
       </nav>
     </header>
   );

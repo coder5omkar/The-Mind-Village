@@ -29,6 +29,7 @@ import { ActionChip } from "@/components/action-chip";
 import { DistrictBadge } from "@/components/district-badge";
 import { HallChat } from "@/components/hall-chat";
 import { PowerBar } from "@/components/power-bar";
+import { VillagerCard } from "@/components/villager-card";
 import { VillagerPortrait } from "@/components/villager-portrait";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,15 +66,9 @@ type DistrictLabelData = {
   count: number;
 };
 
-type DecorData = {
-  emoji: string;
-  size: number;
-};
-
 type ResidentFlowNode = Node<ResidentNodeData, "resident">;
 type DistrictFlowNode = Node<DistrictLabelData, "districtLabel">;
-type DecorFlowNode = Node<DecorData, "decor">;
-type VillageFlowNode = ResidentFlowNode | DistrictFlowNode | DecorFlowNode;
+type VillageFlowNode = ResidentFlowNode | DistrictFlowNode;
 
 function ResidentNode({ data, selected }: NodeProps<ResidentFlowNode>) {
   const meta = districtMeta(data.district);
@@ -171,21 +166,9 @@ function DistrictLabelNode({ data }: NodeProps<DistrictFlowNode>) {
   );
 }
 
-function DecorNode({ data }: NodeProps<DecorFlowNode>) {
-  return (
-    <span
-      className="pointer-events-none select-none drop-shadow-[0_6px_0_rgba(0,0,0,0.25)]"
-      style={{ fontSize: data.size }}
-    >
-      {data.emoji}
-    </span>
-  );
-}
-
 const nodeTypes = {
   resident: ResidentNode,
   districtLabel: DistrictLabelNode,
-  decor: DecorNode,
 };
 
 // ---------------------------------------------------------------------------
@@ -194,15 +177,8 @@ const nodeTypes = {
 // single snaking journey - like real village lanes.
 // ---------------------------------------------------------------------------
 
-const DECOR_EMOJI = ["🌲", "🌳", "🪨", "🏕️", "🌾", "⛰️", "🌲", "🪨"];
-
 type DistrictBounds = { x: number; y: number; width: number; height: number };
 type PathLink = { source: string; target: string; connector?: boolean };
-
-function seeded(index: number, salt: number) {
-  const value = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453;
-  return value - Math.floor(value);
-}
 
 const LANE_SPACING_X = 145; // distance between lanes (center to center)
 const LANE_SPACING_Y = 102; // distance between residents along a lane
@@ -310,30 +286,6 @@ function buildLayout(nodes: VillageNode[]) {
         connector: true,
       });
     }
-  }
-
-  // Decorations hug the edges of the lane world.
-  const mapHalfW = totalWidth / 2 + LANE_BAND_WIDTH / 2 + 60;
-  const mapHalfH = laneHeight / 2 + 60;
-  for (let i = 0; i < 44; i++) {
-    const angle = (i / 44) * Math.PI * 2 + seeded(i, 1) * 0.3;
-    const rx = mapHalfW + 30 + seeded(i, 2) * 150;
-    const ry = mapHalfH + 20 + seeded(i, 3) * 130;
-    flowNodes.push({
-      id: `decor-${i}`,
-      type: "decor",
-      position: {
-        x: Math.cos(angle) * rx,
-        y: Math.sin(angle) * ry,
-      },
-      data: {
-        emoji: DECOR_EMOJI[i % DECOR_EMOJI.length],
-        size: 24 + Math.round(seeded(i, 4) * 16),
-      },
-      selectable: false,
-      draggable: false,
-      zIndex: 1,
-    });
   }
 
   return { flowNodes, boundsByDistrict, positionById, pathLinks };
@@ -462,6 +414,7 @@ function VillageBoard({
 }) {
   const reactFlow = useReactFlow();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [cardId, setCardId] = useState<string | null>(null);
   const [lens, setLens] = useState<Lens>("bonds");
   const [view, setView] = useState<"map" | "hall">("hall");
   const [activeDistrict, setActiveDistrict] = useState<string | null>(null);
@@ -474,12 +427,9 @@ function VillageBoard({
     [data.nodes]
   );
 
-  // Fit the lanes and villagers, not the decorative forest.
+  // Fit every lane and villager in view.
   const fitNodes = useMemo(
-    () =>
-      flowNodes
-        .filter((node) => node.type !== "decor")
-        .map((node) => ({ id: node.id })),
+    () => flowNodes.map((node) => ({ id: node.id })),
     [flowNodes]
   );
 
@@ -489,6 +439,56 @@ function VillageBoard({
   );
 
   const selected = selectedId ? nodesById.get(selectedId) ?? null : null;
+
+  // The detail card can be opened for any villager on the map.
+  const cardResident = cardId ? nodesById.get(cardId) ?? null : null;
+  const cardRelations = useMemo(() => {
+    if (!cardResident) return [];
+    return data.edges
+      .filter(
+        (edge) =>
+          edge.residentAId === cardResident.id ||
+          edge.residentBId === cardResident.id
+      )
+      .map((edge) => {
+        const otherId =
+          edge.residentAId === cardResident.id
+            ? edge.residentBId
+            : edge.residentAId;
+        const resident = nodesById.get(otherId);
+        if (!resident) return null;
+        return {
+          resident,
+          strength: edge.strength,
+          cross: resident.district !== cardResident.district,
+        };
+      })
+      .filter(
+        (
+          entry
+        ): entry is {
+          resident: VillageNode;
+          strength: number;
+          cross: boolean;
+        } => entry !== null
+      )
+      .sort(
+        (a, b) =>
+          Number(b.cross) - Number(a.cross) ||
+          b.strength - a.strength ||
+          a.resident.name.localeCompare(b.resident.name)
+      );
+  }, [data.edges, cardResident, nodesById]);
+
+  const cardThoughts = useMemo(
+    () =>
+      cardId
+        ? data.thoughts
+            .filter((thought) => thought.primaryResident?.id === cardId)
+            .slice(0, 5)
+        : [],
+    [data.thoughts, cardId]
+  );
 
   // Every bond of the selected villager, cross-district and strongest first.
   const relations = useMemo(() => {
@@ -672,7 +672,7 @@ function VillageBoard({
     );
 
   return (
-    <div className="-mx-3 -mb-24 -mt-6 flex h-[calc(100dvh-7rem)] flex-col gap-2 overflow-hidden p-3 sm:-mx-4 sm:-mt-8 lg:grid lg:h-[calc(100dvh-4rem)] lg:grid-cols-[290px_minmax(0,1fr)] lg:grid-rows-[auto_auto_auto_minmax(0,1fr)] lg:gap-3">
+    <div className="-mx-3 -mb-24 -mt-6 flex flex-col gap-2 p-3 pb-4 sm:-mx-4 sm:-mt-8 lg:grid lg:h-[calc(100dvh-4rem)] lg:grid-cols-[290px_minmax(0,1fr)] lg:grid-rows-[auto_auto_auto_minmax(0,1fr)] lg:gap-3 lg:overflow-hidden">
       {/* Header HUD */}
       <div className="flex flex-wrap items-end justify-between gap-3 px-3 sm:px-0 lg:col-start-1 lg:row-start-1 lg:flex-col lg:items-start lg:gap-2 lg:px-0">
         <div className="flex items-center gap-3">
@@ -694,6 +694,9 @@ function VillageBoard({
           <span className="hud-chip">
             <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_8px_#6ee7b7]" />
             {data.stats.activeResidents} active this week
+          </span>
+          <span className="hud-chip">
+            🧭 {data.stats.unlocked}/{data.stats.residentsTotal} discovered
           </span>
           <span className="hud-chip">
             <Star className="h-3.5 w-3.5 text-gold-300" />
@@ -850,7 +853,7 @@ function VillageBoard({
 
       {/* Main stage: the map always stays, with the outcome frame below */}
       <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2 lg:col-start-2 lg:row-span-4 lg:row-start-1 lg:mt-0">
-        <div className="grass-field relative min-h-[240px] flex-1 overflow-hidden rounded-3xl border-4 border-black/50 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+        <div className="grass-field relative h-[56vh] min-h-[300px] overflow-hidden rounded-3xl border-4 border-black/50 shadow-[0_10px_30px_rgba(0,0,0,0.5)] lg:h-auto lg:min-h-[240px] lg:flex-1">
           <ReactFlow
             nodes={styledNodes}
             edges={styledEdges}
@@ -865,6 +868,7 @@ function VillageBoard({
               if (node.type === "resident") {
                 setSelectedId(node.id);
                 setActiveDistrict(node.data.district as string);
+                setCardId(node.id);
               }
             }}
             onPaneClick={() => setSelectedId(null)}
@@ -882,6 +886,7 @@ function VillageBoard({
             <MiniMap
               pannable
               zoomable
+              className="hidden md:block"
               nodeColor={(node) =>
                 districtMeta(
                   (node.data as { district?: string })?.district ?? ""
@@ -890,10 +895,28 @@ function VillageBoard({
               maskColor="rgba(18, 36, 16, 0.78)"
             />
           </ReactFlow>
+
+          {data.nodes.length === 0 ? (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
+              <div className="game-panel max-w-md p-6 text-center">
+                <p className="text-5xl drop-shadow-[0_4px_0_rgba(0,0,0,0.35)]">
+                  🏕️
+                </p>
+                <p className="mt-3 font-display text-xl tracking-wide text-gold-200">
+                  YOUR VILLAGE IS EMPTY
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-400">
+                  The Council Hall is open on the left. Write a thought and the
+                  resident who speaks will appear here. Agree with the
+                  surrounding villagers and they join your village too.
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {/* Outcome frame - selected villager + their circle, below the map */}
-        <div className="game-panel-gold flex h-[200px] shrink-0 flex-col gap-2 overflow-hidden p-3 sm:h-[212px] sm:flex-row sm:gap-3">
+        <div className="game-panel-gold flex h-[180px] shrink-0 flex-col gap-2 overflow-hidden p-3 sm:h-[212px] sm:flex-row sm:gap-3">
           {selected ? (
             <>
               {/* Identity */}
@@ -1062,6 +1085,16 @@ function VillageBoard({
           )}
         </div>
       </div>
+
+      {cardResident ? (
+        <VillagerCard
+          resident={cardResident}
+          relations={cardRelations}
+          thoughts={cardThoughts}
+          onClose={() => setCardId(null)}
+          onTravel={() => travelTo(cardResident.id)}
+        />
+      ) : null}
     </div>
   );
 }

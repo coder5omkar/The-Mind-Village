@@ -29,6 +29,8 @@ export type ThoughtItem = {
     name: string;
     district?: string;
     status?: string;
+    confidence?: number;
+    reason?: string;
   }[];
 };
 
@@ -66,6 +68,8 @@ export type VillageStats = {
   title: string;
   streak: number;
   activeResidents: number;
+  unlocked: number;
+  residentsTotal: number;
 };
 
 export type VillageResponse = {

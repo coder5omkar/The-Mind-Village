@@ -53,17 +53,22 @@ export async function GET() {
 
   // Build the user's custom village graph. Each pair keeps only its latest
   // decision, so disagreeing removes a bond even if it was agreed before.
+  // The village also starts EMPTY: only residents who have spoken (primary in
+  // a reading) or who were agreed with are "unlocked" and appear on the map.
   const bondState = new Map<
     string,
     { status: "agreed" | "rejected"; count: number }
   >();
+  const unlockedIds = new Set<string>();
   for (const thought of bondThoughts) {
     if (!thought.primaryResidentId) continue;
+    unlockedIds.add(thought.primaryResidentId);
     const entries = parseJsonArray<{ id?: string; status?: string }>(
       thought.neighbors
     );
     for (const entry of entries) {
       if (!entry.id) continue;
+      if (entry.status === "agreed") unlockedIds.add(entry.id);
       if (entry.status !== "agreed" && entry.status !== "rejected") continue;
       const [a, b] = [thought.primaryResidentId, entry.id].sort();
       const key = `${a}::${b}`;
@@ -111,7 +116,9 @@ export async function GET() {
     powerAgg.set(row.residentId, entry);
   }
 
-  const nodes = residents.map((resident) => {
+  const nodes = residents
+    .filter((resident) => unlockedIds.has(resident.id))
+    .map((resident) => {
     const agg = powerAgg.get(resident.id);
     const mentionCount = mentions.get(resident.id) ?? 0;
     const stored = agg ? agg.sum / agg.count : null;
@@ -140,6 +147,8 @@ export async function GET() {
       ...levelFor(total),
       streak: computeStreak(dateRows.map((row) => row.createdAt)),
       activeResidents: nodes.filter((node) => node.active).length,
+      unlocked: unlockedIds.size,
+      residentsTotal: residents.length,
     },
   });
 }

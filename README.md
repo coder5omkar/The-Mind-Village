@@ -26,13 +26,15 @@ who leads.
   compassionate explanation. Earn XP for every reading.
 - **Feedback loop** - mark readings correct / partly / wrong and pick the real
   resident. The village learns and resident power shifts.
-- **Village map** - a React Flow board of all 79 residents across 11 vertical
-  lanes. Active residents glow with ✨; click any villager for details and their
-  circle.
+- **Village map** - a React Flow board that starts **empty** and grows with you.
+  Every reading brings its resident onto the map, and agreed surrounding
+  villagers join too. Meeting the same resident again strengthens their power
+  instead of duplicating them. Click any villager for a detail card (gift,
+  shadow, bonds, recent readings).
 - **A village that is yours alone** - there are no predefined relationships.
   Jev suggests four surrounding residents for every reading, and you
-  **agree or disagree** with each one; only your agreed bonds appear on the map
-  and in the relations list.
+  **agree / disagree / not sure** on each one; only your agreed bonds appear on
+  the map and in the relations list.
 - **Analytics (Hall of Records)** - power trends over 14 days, top residents
   this week, reading accuracy, district activity, streak and awareness level.
 - **Works without an API key** - a built-in TypeScript prediction engine
@@ -46,7 +48,7 @@ who leads.
 | ---------- | ------ |
 | Framework  | Next.js 14 (App Router) + TypeScript |
 | Styling    | Tailwind CSS + shadcn/ui-style components (`components/ui`) |
-| Database   | Prisma ORM - SQLite in dev, PostgreSQL in prod |
+| Database   | Prisma ORM + PostgreSQL (Neon) with the Neon driver adapter |
 | Auth       | NextAuth.js (Google OAuth) + Prisma adapter, DB sessions |
 | Graph      | React Flow (`@xyflow/react`) |
 | Charts     | Recharts |
@@ -74,7 +76,7 @@ Copy `.env.example` to `.env`. Only `DATABASE_URL` and `NEXTAUTH_SECRET` are
 needed to run locally - Google OAuth and DeepSeek are optional:
 
 ```bash
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://village:village@localhost:5432/village"
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="<openssl rand -base64 32>"
 GOOGLE_CLIENT_ID=""
@@ -104,7 +106,7 @@ Only needed if you want visitors to be able to save their progress.
 ### 5. Database
 
 ```bash
-npx prisma migrate dev --name init   # creates dev.db + runs the seed
+npx prisma migrate dev --name init   # creates the schema + runs the seed
 npm run db:seed                      # optional - re-run the seed any time
 ```
 
@@ -246,29 +248,27 @@ npm run db:studio   # prisma studio
 
 ---
 
-## Deploying to Vercel
+## Deployment
 
-1. Push the repo to GitHub and import it in Vercel.
-2. Provision a PostgreSQL database (Vercel Postgres, Neon, Supabase, ...).
-3. In `prisma/schema.prisma`, change the datasource provider to
-   `postgresql` (the `Json` columns work on both SQLite and PostgreSQL).
-4. Set the environment variables in Vercel:
-   - `DATABASE_URL` (Postgres connection string)
-   - `NEXTAUTH_URL` (your production URL)
-   - `NEXTAUTH_SECRET`
-   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optional - needed for sign-in)
-   - `DEEPSEEK_API_KEY` (optional)
-5. Add the production redirect URI in Google Cloud Console:
-   `https://your-domain.com/api/auth/callback/google`
-6. Run the migration + seed against the production database once:
+The app deploys to **AWS Amplify Hosting** with **Neon PostgreSQL** (the repo
+includes `amplify.yml` and a Node 20 `.nvmrc`). The full step-by-step guide —
+Neon setup, Google OAuth credentials, Amplify environment variables and the
+Cloudflare alternative — lives in [DEPLOYMENT.md](./DEPLOYMENT.md).
 
-   ```bash
-   DATABASE_URL="<prod-url>" npx prisma migrate deploy
-   DATABASE_URL="<prod-url>" npx tsx prisma/seed.ts
+Quick version:
+
+1. Create a Neon project and run once locally against it:
+   ```powershell
+   $env:DATABASE_URL="postgresql://...neon.tech/village?sslmode=require"
+   npx prisma migrate deploy
+   npx prisma db seed
    ```
-
-7. Deploy. The build command is `prisma generate && next build` (the
-   `postinstall` hook already runs `prisma generate`).
+2. In Amplify: connect the GitHub repo, then set the environment variables
+   `DATABASE_URL`, `NEXTAUTH_URL` (your `https://main.<id>.amplifyapp.com`),
+   `NEXTAUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JEV_API_KEY`.
+3. Deploy, then add
+   `https://main.<id>.amplifyapp.com/api/auth/callback/google` to the Google
+   OAuth client.
 
 ---
 

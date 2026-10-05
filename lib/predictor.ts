@@ -14,11 +14,17 @@ import {
 } from "./residents";
 import { clamp } from "./utils";
 
+export type NeighborSuggestion = {
+  name: string;
+  confidence: number;
+  reason: string;
+};
+
 export type Prediction = {
   primary_resident: string;
   confidence: number;
   secondary_residents: { name: string; confidence: number }[];
-  neighbors: string[];
+  neighbors: NeighborSuggestion[];
   suggested_action: SuggestedAction;
   reasoning: string;
 };
@@ -75,7 +81,7 @@ const LEXICON: Record<string, string[]> = {
   "The Family Man": ["family", "relatives", "kin", "household", "family duties", "family responsibility", "at home"],
   "The Son": ["parents", "mother", "father", "mom", "dad", "my father", "my mother", "respect elders", "their expectations", "family name", "disappoint them"],
   "The Husband": ["wife", "husband", "spouse", "marriage", "married", "anniversary", "my marriage"],
-  "The Parent": ["kid", "kids", "children", "child", "son", "daughter", "parenting", "school run", "my child", "raise them", "my daughter", "my son", "my kids", "worry about my", "something will happen to"],
+  "The Parent": ["kid", "kids", "children", "child", "son", "daughter", "parenting", "school run", "my child", "raise them", "my daughter", "my son", "my kids", "my baby", "my boy", "my girl", "worry about my", "something will happen to"],
   "The Social Man": ["status", "image", "society", "people think", "reputation", "what will people say", "instagram", "followers", "networking", "impress", "party", "social", "social media", "stalking"],
   "The Lonely One": ["lonely", "alone", "no one", "nobody", "isolated", "isolation", "disconnected", "left out", "no friends", "unwanted"],
   "The Helper": ["help", "helping", "serve", "serving", "volunteer", "rescue", "everyone needs me", "can't say no", "save them", "fix their"],
@@ -141,6 +147,87 @@ const LEXICON: Record<string, string[]> = {
   "The Humble One": ["humble", "humility", "grounded", "modest", "ego", "credit others", "learn from", "not above", "admit"],
   "The Free One": ["free", "freedom", "unbound", "let go", "liberated", "liberty", "no chains", "detached from outcome", "release", "unburdened"],
 };
+
+// The lexicon and action overrides below are keyed by the ORIGINAL vocabulary
+// names. Resident display names were later upgraded to psychological-state
+// names (The Topper -> The Comparing Mind, ...), so this map bridges the
+// current display name to its lexicon key.
+const NAME_ALIASES: Record<string, string> = {
+  "The Thinking Mind": "The Thinker",
+  "The Meaning-Seeking Mind": "The Philosopher",
+  "The Growing Mind": "The Learner",
+  "The Planning Mind": "The Planner",
+  "The Dissecting Mind": "The Analyst",
+  "The Long-Game Mind": "The Strategist",
+  "The Fixing Mind": "The Problem-Solver",
+  "The Doubting Mind": "The Questioner",
+  "The Duty-Bound Mind": "The Employee",
+  "The Comparing Mind": "The Topper",
+  "The Needing-to-Shine Mind": "The Genius",
+  "The Standard-Keeping Mind": "The Professional",
+  "The Steering Mind": "The Leader",
+  "The Yielding Mind": "The Follower",
+  "The Risk-Taking Mind": "The Entrepreneur",
+  "The Perfecting Mind": "The Craftsman",
+  "The Calculating Mind": "The Trader",
+  "The Risk-Chasing Mind": "The Gambler",
+  "The Hoarding Mind": "The Saver",
+  "The Craving Mind": "The Spender",
+  "The Compounding Mind": "The Investor",
+  "The Owing Mind": "The Debtor",
+  "The Carrying Mind": "The Provider",
+  "The Connecting One": "The Friend",
+  "The Bonding One": "The Lover",
+  "The Kin-Keeper": "The Family Man",
+  "The Obedient One": "The Son",
+  "The Partnering One": "The Husband",
+  "The Image-Conscious Mind": "The Social Man",
+  "The Longing One": "The Lonely One",
+  "The Rescuing Mind": "The Helper",
+  "The Grieving One": "The Sad One",
+  "The Heavy One": "The Depressive",
+  "The Threat-Scanning Mind": "The Anxious One",
+  "The Beauty-Making Mind": "The Artist",
+  "The Expressing Mind": "The Writer",
+  "The Rhythmic Mind": "The Musician",
+  "The Making Mind": "The Builder",
+  "The Imagining Mind": "The Dreamer",
+  "The Playing One": "The Player",
+  "The Training Mind": "The Athlete",
+  "The Resting One": "The Sleeper",
+  "The Nourishing One": "The Eater",
+  "The Numbing Mind": "The Addict",
+  "The Maintaining One": "The Healthy One",
+  "The Pursuing One": "The Hunter",
+  "The Fleeing One": "The Prey",
+  "The Instinctive One": "The Beast",
+  "The Self-Undoing Mind": "The Saboteur",
+  "The Judging Mind": "The Critic",
+  "The Bitter Mind": "The Cynic",
+  "The Steering-Others Mind": "The Manipulator",
+  "The Hiding Mind": "The Liar",
+  "The Avoiding Mind": "The Coward",
+  "The Dominating Mind": "The Tyrant",
+};
+
+function lexiconKey(name: string) {
+  return NAME_ALIASES[name] ?? name;
+}
+
+/** Plain-language reason why this neighbour was suggested. */
+export function neighborReason(
+  primary: ResidentLite,
+  other: ResidentLite,
+  angle: "closest" | "balance" | "related"
+) {
+  if (angle === "closest") {
+    return `Usually stands right beside ${primary.name} - gift: ${other.function}.`;
+  }
+  if (angle === "balance") {
+    return `Sits on the other side of ${primary.name}, steadying or challenging it - gift: ${other.function}.`;
+  }
+  return `Often appears together with ${primary.name} - gift: ${other.function}.`;
+}
 
 const DISTRICT_DEFAULT_ACTION: Record<District, SuggestedAction> = {
   Cognitive: "redirect",
@@ -223,7 +310,7 @@ function cueScore(text: string, cue: string) {
 }
 
 function scoreResident(text: string, resident: ResidentLite) {
-  const cues = LEXICON[resident.name] ?? [];
+  const cues = LEXICON[lexiconKey(resident.name)] ?? [];
   let score = 0;
   // Specificity (total length of matched cues) is used as a tie-breaker so
   // that "daughter" beats a generic "worry", for example.
@@ -248,7 +335,7 @@ function round(value: number) {
 
 export function pickAction(resident: ResidentLite): SuggestedAction {
   return (
-    RESIDENT_ACTION_OVERRIDES[resident.name] ??
+    RESIDENT_ACTION_OVERRIDES[lexiconKey(resident.name)] ??
     DISTRICT_DEFAULT_ACTION[resident.district as District] ??
     "redirect"
   );
@@ -266,8 +353,12 @@ function fallback(residents: ResidentLite[]): Prediction {
     residents.find((r) => r.name === "The Witness") ?? residents[0];
   const neighbors = residents
     .filter((r) => r.district === witness.district && r.id !== witness.id)
-    .slice(0, 3)
-    .map((r) => r.name);
+    .slice(0, 2)
+    .map((r) => ({
+      name: r.name,
+      confidence: 0.4,
+      reason: neighborReason(witness, r, "closest"),
+    }));
   return {
     primary_resident: witness?.name ?? "The Witness",
     confidence: 0.4,
@@ -322,22 +413,32 @@ export function predictLocally(
       ),
     }));
 
-  // Neighbors: co-active residents from the same district, then fill from the
-  // wider village if the district is small.
-  const sameDistrict = ranked
+  // Neighbours: co-active residents from the same district, best scored first.
+  const neighborEntries = ranked
     .filter(
       (entry) =>
         entry.resident.district === top.resident.district &&
         entry.resident.id !== top.resident.id
     )
-    .map((entry) => entry.resident.name);
-  const filler = residents
+    .map((entry) => ({
+      resident: entry.resident,
+      confidence: round(clamp((entry.score / top.score) * 0.6, 0.15, 0.7)),
+    }));
+  const fillerEntries = residents
     .filter(
-      (r) =>
-        r.district === top.resident.district && r.id !== top.resident.id
+      (resident) =>
+        resident.district === top.resident.district &&
+        resident.id !== top.resident.id &&
+        !neighborEntries.some((entry) => entry.resident.id === resident.id)
     )
-    .map((r) => r.name);
-  const neighbors = Array.from(new Set([...sameDistrict, ...filler])).slice(0, 5);
+    .map((resident) => ({ resident, confidence: 0.3 }));
+  const neighbors = [...neighborEntries, ...fillerEntries]
+    .slice(0, 2)
+    .map((entry) => ({
+      name: entry.resident.name,
+      confidence: entry.confidence,
+      reason: neighborReason(top.resident, entry.resident, "closest"),
+    }));
 
   const action = pickAction(top.resident);
 

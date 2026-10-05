@@ -1,13 +1,14 @@
 // The Village - data model
-// Dev: SQLite. For production (PostgreSQL) switch `provider` to "postgresql"
-// and set DATABASE_URL accordingly. The `Json` columns are supported by both.
+// Production and development both use PostgreSQL (Neon). The Neon driver
+// adapter lets the same Prisma client run on Cloudflare Workers.
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "client"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
