@@ -39,7 +39,6 @@ import {
 } from "@/lib/residents";
 import type {
   AnalyzeResponse,
-  ThoughtItem,
   VillageNode,
   VillageResponse,
 } from "@/lib/types";
@@ -86,7 +85,7 @@ function ResidentNode({ data, selected }: NodeProps<ResidentFlowNode>) {
     <div
       className={cn(
         "group flex w-[104px] cursor-pointer flex-col items-center gap-1 transition-opacity duration-300",
-        data.dimmed && "opacity-25"
+        data.dimmed && "opacity-45"
       )}
     >
       <Handle
@@ -393,53 +392,43 @@ function buildEdges(
     }
   }
 
-  // Dependency bonds
+  // The user's accumulated bonds - ALL of them are always drawn, so every
+  // previous reading stays visible. Selecting a villager highlights their
+  // lines instead of hiding everyone else's.
   for (const edge of neighborhoodEdges) {
     const a = nodesById.get(edge.residentAId);
     const b = nodesById.get(edge.residentBId);
     if (!a || !b) continue;
 
-    const isCross = a.district !== b.district;
     const highlighted =
       Boolean(selectedId) &&
       (edge.residentAId === selectedId || edge.residentBId === selectedId);
     const hovered =
       Boolean(hoveredId) &&
       (edge.residentAId === hoveredId || edge.residentBId === hoveredId);
-
-    // Focus mode: a selected villager hides every unrelated line.
-    if (hasSelection && !highlighted && !hovered) continue;
-
     const districtBoost = Boolean(
       activeDistrict &&
         !hasSelection &&
         (a.district === activeDistrict || b.district === activeDistrict)
     );
 
-    if (lens === "paths" && !isCross && !highlighted && !hovered) continue;
-
     const color = districtColor(a.district);
+    const strengthWidth = 1 + edge.strength * 2.6;
     let opacity: number;
     let strokeWidth: number;
-    let dashed = false;
 
     if (hovered) {
       opacity = 1;
-      strokeWidth = 2.6 + edge.strength * 1.6;
+      strokeWidth = strengthWidth + 1;
     } else if (highlighted) {
       opacity = 0.95;
-      strokeWidth = 1.8 + edge.strength * 1.6;
+      strokeWidth = strengthWidth + 0.6;
     } else if (districtBoost) {
-      opacity = isCross ? 0.4 : 0.5;
-      strokeWidth = 1.6;
-    } else if (lens === "bonds") {
-      opacity = isCross ? 0.14 : 0.3;
-      strokeWidth = Math.max(0.8, edge.strength * 1.6);
+      opacity = 0.55;
+      strokeWidth = strengthWidth;
     } else {
-      // faint "ley lines" showing cross-district interdependency
-      opacity = 0.07;
-      strokeWidth = 1;
-      dashed = true;
+      opacity = lens === "bonds" ? 0.4 : 0.3;
+      strokeWidth = strengthWidth;
     }
 
     result.push({
@@ -452,7 +441,6 @@ function buildEdges(
         stroke: hovered ? "#ffffff" : highlighted ? "#ffe9a3" : color,
         strokeWidth,
         opacity,
-        strokeDasharray: dashed ? "4 7" : undefined,
       },
       zIndex: hovered ? 30 : highlighted ? 20 : 2,
     });
@@ -474,13 +462,12 @@ function VillageBoard({
 }) {
   const reactFlow = useReactFlow();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [lens, setLens] = useState<Lens>("paths");
+  const [lens, setLens] = useState<Lens>("bonds");
   const [view, setView] = useState<"map" | "hall">("hall");
   const [activeDistrict, setActiveDistrict] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [lastResult, setLastResult] = useState<AnalyzeResponse | null>(null);
   const [hoveredRelation, setHoveredRelation] = useState<string | null>(null);
-  const [savingSurrounder, setSavingSurrounder] = useState<string | null>(null);
 
   const { flowNodes, boundsByDistrict, positionById, pathLinks } = useMemo(
     () => buildLayout(data.nodes),
@@ -673,38 +660,6 @@ function VillageBoard({
         zoom: 1.15,
         duration: 800,
       });
-    }
-  }
-
-  // Agree/disagree with a Jev-suggested surrounder right from the map panel.
-  // The choice is saved and becomes (or stays out of) the user's village.
-  async function decideSurrounder(
-    thoughtId: string,
-    residentId: string,
-    status: "agreed" | "rejected" | "unsure"
-  ) {
-    setSavingSurrounder(residentId);
-    try {
-      const response = await fetch(`/api/thoughts/${thoughtId}/surrounders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ residentId, status }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error ?? "Could not save your choice.");
-      }
-      const updated = data.thought as ThoughtItem;
-      setLastResult((previous) =>
-        previous && previous.thought.id === thoughtId
-          ? { ...previous, thought: updated }
-          : previous
-      );
-      onRefresh();
-    } catch {
-      // Errors surface in the Hall chat; the map keeps its state.
-    } finally {
-      setSavingSurrounder(null);
     }
   }
 
@@ -937,8 +892,8 @@ function VillageBoard({
           </ReactFlow>
         </div>
 
-        {/* Outcome frame - selected villager + every relation, below the map */}
-        <div className="game-panel-gold flex h-[238px] shrink-0 flex-col gap-2 overflow-hidden p-3 sm:h-[224px] sm:flex-row sm:gap-3">
+        {/* Outcome frame - selected villager + their circle, below the map */}
+        <div className="game-panel-gold flex h-[200px] shrink-0 flex-col gap-2 overflow-hidden p-3 sm:h-[212px] sm:flex-row sm:gap-3">
           {selected ? (
             <>
               {/* Identity */}
@@ -988,117 +943,9 @@ function VillageBoard({
                 </div>
               </div>
 
-              {/* Jev's suggested surrounders + the agreed bonds */}
+              {/* The agreed bonds - decisions happen in the Council Hall chat */}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                    🔮 Jev suggests - agree to add them to your circle
-                  </p>
-                  <span className="hidden text-[9px] font-bold text-slate-500 md:block">
-                    your choices build your village
-                  </span>
-                </div>
-                {!selectedThought ? (
-                  <p className="mt-1 text-[10px] font-bold text-slate-500">
-                    No reading for this villager yet - ask in the Council Hall.
-                  </p>
-                ) : (selectedThought.neighbors ?? []).length === 0 ? (
-                  <p className="mt-1 text-[10px] font-bold text-slate-500">
-                    Jev found no surrounding residents in the latest reading.
-                  </p>
-                ) : (
-                  <div className="mt-1 flex shrink-0 gap-2 overflow-x-auto pb-1">
-                    {(selectedThought.neighbors ?? []).map((surrounder) => (
-                      <div
-                        key={surrounder.id ?? surrounder.name}
-                        className="w-[214px] shrink-0 rounded-xl border-2 border-black/40 bg-[#0d1526]/70 p-2"
-                      >
-                        <div className="flex items-center gap-2">
-                          <VillagerPortrait
-                            name={surrounder.name}
-                            district={surrounder.district ?? ""}
-                            size={30}
-                            frame={false}
-                          />
-                          <p className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-200">
-                            {surrounder.name}
-                          </p>
-                          {surrounder.status === "agreed" ? (
-                            <span className="shrink-0 text-[9px] font-bold text-emerald-300">
-                              ✓ in your village
-                            </span>
-                          ) : surrounder.status === "rejected" ? (
-                            <span className="shrink-0 text-[9px] font-bold text-slate-500">
-                              ✗ not yours
-                            </span>
-                          ) : surrounder.status === "unsure" ? (
-                            <span className="shrink-0 text-[9px] font-bold text-amber-200">
-                              🤔 not sure yet
-                            </span>
-                          ) : null}
-                        </div>
-                        {surrounder.status !== "agreed" &&
-                        surrounder.status !== "rejected" ? (
-                          <div className="mt-1 flex gap-1">
-                            <Button
-                              variant="success"
-                              size="sm"
-                              className="h-6 flex-1 px-1 text-[10px]"
-                              disabled={savingSurrounder === surrounder.id}
-                              onClick={() =>
-                                surrounder.id &&
-                                selectedThought &&
-                                decideSurrounder(
-                                  selectedThought.id,
-                                  surrounder.id,
-                                  "agreed"
-                                )
-                              }
-                            >
-                              Agree
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="h-6 flex-1 px-1 text-[10px]"
-                              disabled={savingSurrounder === surrounder.id}
-                              onClick={() =>
-                                surrounder.id &&
-                                selectedThought &&
-                                decideSurrounder(
-                                  selectedThought.id,
-                                  surrounder.id,
-                                  "rejected"
-                                )
-                              }
-                            >
-                              Disagree
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="h-6 flex-1 px-1 text-[10px]"
-                              disabled={savingSurrounder === surrounder.id}
-                              onClick={() =>
-                                surrounder.id &&
-                                selectedThought &&
-                                decideSurrounder(
-                                  selectedThought.id,
-                                  surrounder.id,
-                                  "unsure"
-                                )
-                              }
-                            >
-                              Not sure
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mt-1.5 flex items-center justify-between gap-2">
                   <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
                     🔗 In your village - {relations.length} bonds ·{" "}
                     {relationDistrictCount} districts
@@ -1109,7 +956,8 @@ function VillageBoard({
                 </div>
                 {relations.length === 0 ? (
                   <p className="mt-1 text-[10px] font-bold leading-relaxed text-slate-500">
-                    No agreed bonds yet - agree with a suggestion above to build
+                    No agreed bonds yet. Open the Council Hall chat, ask a
+                    thought, and agree with the surrounding residents to build
                     this villager&apos;s circle.
                   </p>
                 ) : (
@@ -1149,7 +997,8 @@ function VillageBoard({
                           <span className="truncate text-[9px] font-bold text-slate-500">
                             {relation.cross
                               ? relation.resident.district
-                              : "same district"}
+                              : "same district"}{" "}
+                            · {Math.round(relation.strength * 100)}%
                           </span>
                         </div>
                         <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-black/40">

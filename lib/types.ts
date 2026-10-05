@@ -91,6 +91,11 @@ export type AnalyticsResponse = {
     total: number;
     percent: number;
   };
+  account: {
+    lastSignIn: string | null;
+    signInCount: number;
+    sessionCount: number;
+  };
   topThisWeek: {
     id: string;
     name: string;

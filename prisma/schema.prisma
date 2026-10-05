@@ -25,7 +25,20 @@ model User {
   sessions      Session[]
   thoughts      Thought[]
   residentPower ResidentPower[]
+  authEvents    AuthEvent[]
   createdAt     DateTime        @default(now())
+}
+
+// Login / logout history, so sessions and account activity are auditable.
+model AuthEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     String // "sign_in" | "sign_out"
+  provider  String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Account {

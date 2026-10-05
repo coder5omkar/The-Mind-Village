@@ -26,10 +26,11 @@ export async function GET() {
     await Promise.all([
       prisma.resident.findMany({ orderBy: { name: "asc" } }),
       // Bonds are personal: they only exist where the user agreed with a
-      // surrounding resident in one of their readings.
+      // surrounding resident, and the LATEST decision per pair wins.
       prisma.thought.findMany({
         where: { userId: user.id, primaryResidentId: { not: null } },
         select: { primaryResidentId: true, neighbors: true },
+        orderBy: { createdAt: "asc" },
       }),
       prisma.thought.findMany({
         where: { userId: user.id },
@@ -50,29 +51,44 @@ export async function GET() {
       }),
     ]);
 
-  // Build the user's custom village graph from agreed surrounders.
-  const bondCounts = new Map<string, number>();
+  // Build the user's custom village graph. Each pair keeps only its latest
+  // decision, so disagreeing removes a bond even if it was agreed before.
+  const bondState = new Map<
+    string,
+    { status: "agreed" | "rejected"; count: number }
+  >();
   for (const thought of bondThoughts) {
     if (!thought.primaryResidentId) continue;
     const entries = parseJsonArray<{ id?: string; status?: string }>(
       thought.neighbors
     );
     for (const entry of entries) {
-      if (entry.status !== "agreed" || !entry.id) continue;
+      if (!entry.id) continue;
+      if (entry.status !== "agreed" && entry.status !== "rejected") continue;
       const [a, b] = [thought.primaryResidentId, entry.id].sort();
       const key = `${a}::${b}`;
-      bondCounts.set(key, (bondCounts.get(key) ?? 0) + 1);
+      if (entry.status === "rejected") {
+        bondState.set(key, { status: "rejected", count: 0 });
+      } else {
+        const previous = bondState.get(key);
+        bondState.set(key, {
+          status: "agreed",
+          count: previous?.status === "agreed" ? previous.count + 1 : 1,
+        });
+      }
     }
   }
-  const edges = Array.from(bondCounts.entries()).map(([key, count]) => {
-    const [residentAId, residentBId] = key.split("::");
-    return {
-      id: `bond-${key}`,
-      residentAId,
-      residentBId,
-      strength: Math.min(0.95, 0.5 + (count - 1) * 0.15),
-    };
-  });
+  const edges = Array.from(bondState.entries())
+    .filter(([, state]) => state.status === "agreed")
+    .map(([key, state]) => {
+      const [residentAId, residentBId] = key.split("::");
+      return {
+        id: `bond-${key}`,
+        residentAId,
+        residentBId,
+        strength: Math.min(0.95, 0.5 + (state.count - 1) * 0.15),
+      };
+    });
 
   const total = await prisma.thought.count({ where: { userId: user.id } });
 

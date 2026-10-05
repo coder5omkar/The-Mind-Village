@@ -20,6 +20,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { districtColor, districtMeta } from "@/lib/residents";
 import type { AnalyticsResponse } from "@/lib/types";
+import { timeAgo } from "@/lib/utils";
 
 type TooltipEntry = {
   name?: string;
@@ -183,6 +184,15 @@ export function AnalyticsView() {
             Who has been leading, how accurate the readings are, how power is
             shifting.
           </p>
+          {data.account?.lastSignIn ? (
+            <p className="mt-1 text-[11px] font-bold text-slate-500">
+              🔐 Last sign-in {timeAgo(data.account.lastSignIn)} ·{" "}
+              {data.account.signInCount} sign-in
+              {data.account.signInCount === 1 ? "" : "s"} ·{" "}
+              {data.account.sessionCount} active session
+              {data.account.sessionCount === 1 ? "" : "s"}
+            </p>
+          ) : null}
         </div>
       </div>
 

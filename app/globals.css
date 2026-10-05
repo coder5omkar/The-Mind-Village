@@ -171,3 +171,188 @@
   border-radius: 12px;
   overflow: hidden;
 }
+
+/* ---------------------------------------------------------------------------
+   Themes. The default is "night". A `data-theme` attribute on <html> swaps the
+   main surfaces. Overrides target the shared structural classes and the most
+   common utility colors used across the game UI.
+   --------------------------------------------------------------------------- */
+
+.backdrop-dim {
+  background: rgba(3, 7, 18, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+/* --- Dawn (light parchment) ------------------------------------------------ */
+[data-theme="dawn"] body {
+  background-color: #f2ead8;
+  background-image: radial-gradient(
+      1200px 700px at 12% -10%,
+      rgba(255, 214, 130, 0.4),
+      transparent 60%
+    ),
+    radial-gradient(
+      1000px 600px at 92% 0%,
+      rgba(125, 211, 252, 0.28),
+      transparent 55%
+    ),
+    radial-gradient(
+      900px 800px at 50% 115%,
+      rgba(120, 180, 90, 0.32),
+      transparent 60%
+    );
+  color: #33404e;
+}
+[data-theme="dawn"] .game-panel,
+[data-theme="dawn"] .game-panel-gold {
+  background-image: linear-gradient(180deg, #fffdf6 0%, #f0e8d6 100%);
+  border-color: rgba(120, 96, 50, 0.35);
+  color: #33404e;
+}
+[data-theme="dawn"] .game-panel-gold {
+  border-color: rgba(181, 128, 26, 0.65);
+  box-shadow: 0 8px 24px rgba(120, 90, 30, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 0 0 3px rgba(244, 197, 66, 0.18);
+}
+[data-theme="dawn"] .hud-chip {
+  background-image: linear-gradient(180deg, #fffdf6 0%, #eee4cf 100%);
+  border-color: rgba(120, 96, 50, 0.35);
+  color: #4a4232;
+}
+[data-theme="dawn"] .scroll-input {
+  background-color: #fffdf7;
+  border-color: rgba(120, 96, 50, 0.4);
+  color: #2f3a46;
+  box-shadow: inset 0 2px 6px rgba(120, 96, 50, 0.12);
+}
+[data-theme="dawn"] .grass-field {
+  background-color: #7cb45c;
+}
+[data-theme="dawn"] [class*="bg-[#0d1526]"] {
+  background-color: #f8f2e4 !important;
+}
+[data-theme="dawn"] [class*="bg-[#0b1120]"] {
+  background-color: #e7dcc4 !important;
+}
+[data-theme="dawn"] [class*="bg-[#0d1322]"] {
+  background-color: #fffdf7 !important;
+}
+[data-theme="dawn"] [class*="bg-[#16213f]"] {
+  background-color: #fbf6ea !important;
+}
+[data-theme="dawn"] [class*="from-[#243356]"] {
+  background-image: linear-gradient(180deg, #fffdf6, #ece2cc) !important;
+}
+[data-theme="dawn"] [class*="from-[#16213f]"] {
+  background-image: linear-gradient(180deg, #fdfaf2, #efe6d3) !important;
+}
+[data-theme="dawn"] [class*="from-[#2b3c63]"] {
+  background-image: linear-gradient(180deg, #d9ecff, #c3ddff) !important;
+}
+[data-theme="dawn"] [class*="bg-black/"] {
+  background-color: rgba(120, 96, 50, 0.09) !important;
+}
+[data-theme="dawn"] [class*="border-black/"] {
+  border-color: rgba(120, 96, 50, 0.3) !important;
+}
+[data-theme="dawn"] .text-slate-100,
+[data-theme="dawn"] .text-slate-200,
+[data-theme="dawn"] .text-slate-300 {
+  color: #33404e !important;
+}
+[data-theme="dawn"] .text-slate-400,
+[data-theme="dawn"] .text-slate-500 {
+  color: #6b6250 !important;
+}
+[data-theme="dawn"] .text-gold-200,
+[data-theme="dawn"] .text-gold-300 {
+  color: #8a5e10 !important;
+}
+[data-theme="dawn"] .text-emerald-300 {
+  color: #047857 !important;
+}
+[data-theme="dawn"] .text-amber-200,
+[data-theme="dawn"] .text-amber-300 {
+  color: #92400e !important;
+}
+[data-theme="dawn"] .text-rose-300 {
+  color: #9f1239 !important;
+}
+[data-theme="dawn"] .text-orange-200,
+[data-theme="dawn"] .text-orange-300 {
+  color: #9a3412 !important;
+}
+[data-theme="dawn"] .text-sky-200,
+[data-theme="dawn"] .text-sky-300 {
+  color: #075985 !important;
+}
+[data-theme="dawn"] .text-indigo-200 {
+  color: #3730a3 !important;
+}
+[data-theme="dawn"] .react-flow__controls button {
+  background: linear-gradient(180deg, #fffdf6, #ece2cc);
+  color: #33404e;
+}
+[data-theme="dawn"] .react-flow__minimap {
+  background: rgba(248, 242, 228, 0.92) !important;
+}
+
+/* --- Ocean (deep teal) ------------------------------------------------------ */
+[data-theme="ocean"] body {
+  background-color: #052a31;
+  background-image: radial-gradient(
+      1200px 700px at 12% -10%,
+      rgba(56, 189, 248, 0.2),
+      transparent 60%
+    ),
+    radial-gradient(
+      1000px 600px at 92% 0%,
+      rgba(45, 212, 191, 0.16),
+      transparent 55%
+    ),
+    radial-gradient(
+      900px 800px at 50% 115%,
+      rgba(16, 185, 129, 0.16),
+      transparent 60%
+    );
+  color: #d8ecf0;
+}
+[data-theme="ocean"] .game-panel,
+[data-theme="ocean"] .game-panel-gold {
+  background-image: linear-gradient(180deg, #0f3a44 0%, #082a32 100%);
+}
+[data-theme="ocean"] .hud-chip {
+  background-image: linear-gradient(180deg, #14515c, #0c3a44);
+}
+[data-theme="ocean"] .scroll-input {
+  background-color: #0a2f37;
+}
+[data-theme="ocean"] .grass-field {
+  background-color: #2f6f52;
+}
+[data-theme="ocean"] [class*="bg-[#0d1526]"] {
+  background-color: #0a3038 !important;
+}
+[data-theme="ocean"] [class*="bg-[#0b1120]"] {
+  background-color: #052027 !important;
+}
+[data-theme="ocean"] [class*="bg-[#0d1322]"] {
+  background-color: #0a2f37 !important;
+}
+[data-theme="ocean"] [class*="bg-[#16213f]"] {
+  background-color: #0d3841 !important;
+}
+[data-theme="ocean"] [class*="from-[#243356]"] {
+  background-image: linear-gradient(180deg, #155059, #0d3d46) !important;
+}
+[data-theme="ocean"] [class*="from-[#16213f]"] {
+  background-image: linear-gradient(180deg, #0f3a44, #072b33) !important;
+}
+[data-theme="ocean"] [class*="from-[#2b3c63]"] {
+  background-image: linear-gradient(180deg, #1a5b66, #11454e) !important;
+}
+[data-theme="ocean"] .react-flow__controls button {
+  background: linear-gradient(180deg, #14515c, #0c3a44);
+}
+

@@ -52,6 +52,16 @@ export async function GET() {
 
   const total = allThoughts.length;
 
+  // Account activity: last sign-in, total sign-ins, active sessions.
+  const [lastSignIn, signInCount, sessionCount] = await Promise.all([
+    prisma.authEvent.findFirst({
+      where: { userId: user.id, event: "sign_in" },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.authEvent.count({ where: { userId: user.id, event: "sign_in" } }),
+    prisma.session.count({ where: { userId: user.id } }),
+  ]);
+
   // All-time mentions (used to choose which residents to plot).
   const allCounts = new Map<string, number>();
   const districtCounts = new Map<string, number>();
@@ -125,6 +135,11 @@ export async function GET() {
       streak: computeStreak(dateRows.map((row) => row.createdAt)),
     },
     accuracy: accuracyFrom(feedbackRows.map((row) => row.feedback)),
+    account: {
+      lastSignIn: lastSignIn?.createdAt.toISOString() ?? null,
+      signInCount,
+      sessionCount,
+    },
     topThisWeek,
     trends: { days, series },
     districtBreakdown: DISTRICT_ORDER.map((district) => ({

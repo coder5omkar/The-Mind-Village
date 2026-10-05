@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import { Maximize2, Minimize2, Send } from "lucide-react";
 import { ActionChip } from "@/components/action-chip";
 import { VillagerPortrait } from "@/components/villager-portrait";
 import { Button } from "@/components/ui/button";
@@ -71,7 +71,19 @@ export function HallChat({
   );
   const [correctedId, setCorrectedId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingSurrounder, setSavingSurrounder] = useState<string | null>(null);
   const [xpFlash, setXpFlash] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+
+  // Escape closes the popped-out chat.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Restore the conversation from saved thoughts (oldest first).
@@ -97,7 +109,7 @@ export function HallChat({
             feedback: thought.feedback,
           });
         }
-        setMessages(history.slice(-40));
+        setMessages(history.slice(-120));
         setHistoryLoaded(true);
       })
       .catch(() => setHistoryLoaded(true));
@@ -217,25 +229,69 @@ export function HallChat({
     }
   }
 
-  return (
-    <div
-      className={cn(
-        "game-panel min-h-0 flex-col overflow-hidden",
-        className
-      )}
-    >
-      <div className="flex shrink-0 items-center justify-between border-b-2 border-black/40 px-3 py-2">
+  async function sendSurrounder(
+    thoughtId: string,
+    residentId: string,
+    status: "agreed" | "rejected" | "unsure"
+  ) {
+    setSavingSurrounder(residentId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/thoughts/${thoughtId}/surrounders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ residentId, status }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Could not save your choice.");
+      }
+      const updated = data.thought as ThoughtItem;
+      setMessages((previous) =>
+        previous.map((message) =>
+          message.role === "village" && message.thoughtId === thoughtId
+            ? { ...message, surrounders: updated.neighbors }
+            : message
+        )
+      );
+      onRefresh();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not save your choice."
+      );
+    } finally {
+      setSavingSurrounder(null);
+    }
+  }
+
+  const panel = (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b-2 border-black/40 px-3 py-2">
         <span className="flex items-center gap-2 font-display text-xs tracking-wide text-gold-200 [text-shadow:0_1px_0_rgba(0,0,0,0.5)]">
           <span className="text-base leading-none">💬</span> CHAT WITH THE VILLAGE
         </span>
-        {xpFlash ? (
-          <span
-            key={xpFlash}
-            className="animate-rise rounded-lg border-2 border-gold-700 bg-gradient-to-b from-gold-300 to-gold-500 px-2 py-0.5 font-display text-[10px] text-[#3d2500]"
+        <div className="flex items-center gap-1">
+          {xpFlash ? (
+            <span
+              key={xpFlash}
+              className="animate-rise rounded-lg border-2 border-gold-700 bg-gradient-to-b from-gold-300 to-gold-500 px-2 py-0.5 font-display text-[10px] text-[#3d2500]"
+            >
+              +10 XP
+            </span>
+          ) : null}
+          <button
+            onClick={() => setExpanded((value) => !value)}
+            className="rounded-lg p-1 text-slate-400 transition hover:bg-white/5 hover:text-white"
+            title={expanded ? "Shrink chat" : "Open full chat"}
+            aria-label={expanded ? "Shrink chat" : "Open full chat"}
           >
-            +10 XP
-          </span>
-        ) : null}
+            {expanded ? (
+              <Minimize2 className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
+            )}
+          </button>
+        </div>
       </div>
 
       <div
@@ -297,11 +353,97 @@ export function HallChat({
                 ) : null}
 
                 {message.surrounders.length > 0 ? (
-                  <p className="mt-2 text-[9px] font-bold text-slate-500">
-                    🔮 {message.surrounders.length} surrounding resident
-                    {message.surrounders.length === 1 ? "" : "s"} suggested -
-                    agree, disagree or skip them in the panel below the map.
-                  </p>
+                  <div className="mt-2">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                      Surrounding residents - build your village
+                    </p>
+                    <div className="mt-1.5 space-y-1.5">
+                      {message.surrounders.map((surrounder) => (
+                        <div
+                          key={surrounder.id ?? surrounder.name}
+                          className="rounded-lg border border-black/30 bg-black/20 px-2 py-1.5"
+                        >
+                          <div className="flex items-center gap-2">
+                            <VillagerPortrait
+                              name={surrounder.name}
+                              district={surrounder.district ?? ""}
+                              size={26}
+                              frame={false}
+                            />
+                            <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-200">
+                              {surrounder.name}
+                            </span>
+                            {surrounder.status === "agreed" ? (
+                              <span className="shrink-0 text-[9px] font-bold text-emerald-300">
+                                ✓ in your village
+                              </span>
+                            ) : surrounder.status === "rejected" ? (
+                              <span className="shrink-0 text-[9px] font-bold text-slate-500">
+                                ✗ not yours
+                              </span>
+                            ) : surrounder.status === "unsure" ? (
+                              <span className="shrink-0 text-[9px] font-bold text-amber-200">
+                                🤔 not sure yet
+                              </span>
+                            ) : null}
+                          </div>
+                          {surrounder.status !== "agreed" &&
+                          surrounder.status !== "rejected" ? (
+                            <div className="mt-1 flex gap-1">
+                              <Button
+                                variant="success"
+                                size="sm"
+                                className="h-6 px-2 text-[10px]"
+                                disabled={savingSurrounder === surrounder.id}
+                                onClick={() =>
+                                  surrounder.id &&
+                                  sendSurrounder(
+                                    message.thoughtId,
+                                    surrounder.id,
+                                    "agreed"
+                                  )
+                                }
+                              >
+                                Agree
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="h-6 px-2 text-[10px]"
+                                disabled={savingSurrounder === surrounder.id}
+                                onClick={() =>
+                                  surrounder.id &&
+                                  sendSurrounder(
+                                    message.thoughtId,
+                                    surrounder.id,
+                                    "rejected"
+                                  )
+                                }
+                              >
+                                Disagree
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="h-6 px-2 text-[10px]"
+                                disabled={savingSurrounder === surrounder.id}
+                                onClick={() =>
+                                  surrounder.id &&
+                                  sendSurrounder(
+                                    message.thoughtId,
+                                    surrounder.id,
+                                    "unsure"
+                                  )
+                                }
+                              >
+                                Not sure
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ) : null}
 
                 <div className="mt-2 border-t-2 border-black/25 pt-2">
@@ -444,6 +586,40 @@ export function HallChat({
           </p>
         ) : null}
       </form>
+    </>
+  );
+
+  if (expanded) {
+    return (
+      <div
+        className="backdrop-dim fixed inset-0 z-50 flex items-center justify-center p-4"
+        onClick={() => setExpanded(false)}
+      >
+        <div
+          className="game-panel flex h-[min(84vh,780px)] w-[min(780px,96vw)] flex-col overflow-hidden"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {panel}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "game-panel group relative min-h-0 cursor-pointer flex-col overflow-hidden",
+        className
+      )}
+      onClick={() => setExpanded(true)}
+      title="Click to open the full chat (Esc closes it)"
+    >
+      {panel}
+      <div className="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center bg-black/45 opacity-0 transition group-hover:opacity-100 sm:flex">
+        <span className="hud-chip border-gold-600/50 text-gold-200">
+          ⛶ Click anywhere to open the full chat
+        </span>
+      </div>
     </div>
   );
 }

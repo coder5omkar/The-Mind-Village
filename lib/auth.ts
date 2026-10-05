@@ -27,8 +27,20 @@ export const authOptions: NextAuthOptions = {
     },
   },
   events: {
-    // When a visitor signs in, carry their village over to the account.
-    async signIn({ user }) {
+    // Record every sign-in, then carry a visitor's village to the account.
+    async signIn({ user, account }) {
+      try {
+        await prisma.authEvent.create({
+          data: {
+            userId: user.id,
+            event: "sign_in",
+            provider: account?.provider ?? "google",
+          },
+        });
+      } catch (error) {
+        console.warn("[village] could not record sign-in:", error);
+      }
+
       try {
         const result = await transferGuestData(user.id);
         if (result.moved > 0) {
@@ -38,6 +50,22 @@ export const authOptions: NextAuthOptions = {
         }
       } catch (error) {
         console.warn("[village] visitor transfer skipped:", error);
+      }
+    },
+    async signOut(message) {
+      try {
+        const payload = message as {
+          session?: { userId?: string };
+          token?: { sub?: string };
+        };
+        const userId = payload.session?.userId ?? payload.token?.sub;
+        if (userId) {
+          await prisma.authEvent.create({
+            data: { userId, event: "sign_out" },
+          });
+        }
+      } catch (error) {
+        console.warn("[village] could not record sign-out:", error);
       }
     },
   },

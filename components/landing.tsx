@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Compass, Eye, HandHeart, Play } from "lucide-react";
 import { GoogleSignInButton } from "@/components/google-sign-in";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { buttonVariants } from "@/components/ui/button";
 import { DISTRICT_META, DISTRICT_ORDER } from "@/lib/residents";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,7 @@ export function Landing({ signedIn }: { signedIn: boolean }) {
           <span className="text-3xl">🏰</span> THE VILLAGE
         </span>
         <div className="flex items-center gap-2">
+          <ThemeSwitcher className="mr-1 hidden sm:flex" />
           <Link
             href="/about"
             className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}

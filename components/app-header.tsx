@@ -14,6 +14,7 @@ import {
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -89,6 +90,7 @@ export function AppHeader({ user, isGuest, level, streak, total }: Props) {
         </nav>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <ThemeSwitcher className="hidden md:flex" />
           <div
             className="hud-chip hidden md:inline-flex"
             title={`${level.title} - ${level.xp}/${level.xpNeeded} XP to next level`}
