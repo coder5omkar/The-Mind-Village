@@ -6,11 +6,9 @@ frontend:
         - npm ci --no-audit --no-fund
         - npx prisma generate
     build:
-      # Amplify does not pass console environment variables to the Next.js
-      # server runtime by default. The script writes them into .env.production
-      # so server components, API routes and SSR can read them at runtime.
-      - bash scripts/amplify-env.sh
-      - npm run build
+      commands:
+        - bash scripts/amplify-env.sh
+        - npm run build
   artifacts:
     baseDirectory: .next
     files:
