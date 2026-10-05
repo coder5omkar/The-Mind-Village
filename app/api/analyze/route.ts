@@ -57,30 +57,12 @@ export async function POST(req: Request) {
     )
     .slice(0, 3);
 
-  // Neighbors: model suggestions first, then the strongest graph edges.
+  // Surrounding residents suggested by the engine - the user approves each
+  // one before it becomes a bond in their own village. No predefined graph.
   const neighborMap = new Map<string, Resident>();
   for (const name of prediction.neighbors) {
     const resident = byName.get(name);
-    if (resident && resident.id !== primary.id && neighborMap.size < 5) {
-      neighborMap.set(resident.id, resident);
-    }
-  }
-  const edges = await prisma.neighborhood.findMany({
-    where: {
-      OR: [{ residentAId: primary.id }, { residentBId: primary.id }],
-    },
-    include: { residentA: true, residentB: true },
-    orderBy: { strength: "desc" },
-    take: 8,
-  });
-  for (const edge of edges) {
-    const resident =
-      edge.residentAId === primary.id ? edge.residentB : edge.residentA;
-    if (
-      resident.id !== primary.id &&
-      !neighborMap.has(resident.id) &&
-      neighborMap.size < 5
-    ) {
+    if (resident && resident.id !== primary.id && neighborMap.size < 4) {
       neighborMap.set(resident.id, resident);
     }
   }
@@ -100,6 +82,7 @@ export async function POST(req: Request) {
         id: n.id,
         name: n.name,
         district: n.district,
+        status: "pending",
       })),
       suggestedAction: prediction.suggested_action,
       reasoning: prediction.reasoning,
@@ -110,7 +93,7 @@ export async function POST(req: Request) {
   // Activity gently charges the residents that showed up.
   await bumpMany(user.id, [
     { residentId: primary.id, delta: 0.05 },
-    ...secondaries.map((s) => ({ residentId: s.resident.id, delta: 0.02 })),
+    ...neighbors.map((n) => ({ residentId: n.id, delta: 0.02 })),
   ]);
 
   return NextResponse.json({

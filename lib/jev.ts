@@ -3,10 +3,12 @@
 // Jev is NOT an OpenAI-compatible chat API. One POST sends a `state` plus
 // typed `questions` (choice / score / noul) and returns typed answers with
 // probabilities and a confidence value. For The Village we ask:
-//   1. primary_resident   - choice over all 79 residents
-//   2. secondary_resident - choice over all residents + "none"
-//   3. suggested_action   - choice over increase/decrease/redirect/sleep
-//   4. safety_crisis      - noul gate for self-harm language
+//   1. primary_resident    - choice over all 79 residents
+//   2. surrounding_1 .. 4  - four nearby residents, always chosen
+//   3. suggested_action    - choice over increase/decrease/redirect/sleep
+//   4. safety_crisis       - noul gate for self-harm language
+// If the four surrounding slots repeat residents, a second "fill" call
+// excludes the already-picked names until four distinct ones are found.
 //
 // Endpoints (same request shape, different keys):
 //   hosted gateway:  https://jevtypesafeai.com/api/v1/decide   (jv_live_... key)
@@ -45,12 +47,22 @@ export function resolveJevEndpoint(apiKey: string) {
 // Request
 // ---------------------------------------------------------------------------
 
-export function buildJevRequest(thought: string, residents: ResidentLite[]) {
+function buildCriteria(residents: ResidentLite[]) {
   const criteria: Record<string, string> = {};
   for (const resident of residents) {
     criteria[slugifyResident(resident.name)] =
       `${resident.function}; shadow: ${resident.shadow || "none listed"}`;
   }
+  return criteria;
+}
+
+export function buildJevRequest(thought: string, residents: ResidentLite[]) {
+  const criteria = buildCriteria(residents);
+
+  // Surrounding residents: four distinct angles. Jev must always choose one
+  // for each slot - the user approves or rejects them, so a weak suggestion is
+  // fine and can simply be disagreed with.
+  const surroundCriteria = criteria;
 
   return {
     model: process.env.JEV_MODEL?.trim() || "jev-latest",
@@ -62,14 +74,29 @@ export function buildJevRequest(thought: string, residents: ResidentLite[]) {
           "The state is a personal thought, feeling or worry someone wrote about themselves. Which resident of their inner village - a part or identity - is MOST likely speaking? Choose the single best match.",
         criteria,
       },
-      secondary_resident: {
+      surrounding_1: {
         type: "choice",
         instructions:
-          "Which other resident is also active or standing right beside the primary one? Choose one, or choose none if nothing else is clearly present.",
-        criteria: {
-          none: "No other resident is clearly co-active",
-          ...criteria,
-        },
+          "Which resident stands closest to the primary one - the most likely co-active neighbor? Always choose the single best resident.",
+        criteria: surroundCriteria,
+      },
+      surrounding_2: {
+        type: "choice",
+        instructions:
+          "Which other resident is often pulled in when the primary one speaks? Choose a different resident than the closest neighbor. Always choose one.",
+        criteria: surroundCriteria,
+      },
+      surrounding_3: {
+        type: "choice",
+        instructions:
+          "Which resident pushes, provokes or competes with the primary one? Always choose one.",
+        criteria: surroundCriteria,
+      },
+      surrounding_4: {
+        type: "choice",
+        instructions:
+          "Which resident calms, protects or balances the primary one? Always choose one.",
+        criteria: surroundCriteria,
       },
       suggested_action: {
         type: "choice",
@@ -86,6 +113,48 @@ export function buildJevRequest(thought: string, residents: ResidentLite[]) {
         type: "noul",
         instructions:
           "Does the state clearly suggest self-harm, suicide, or an immediate safety crisis? Answer true only with clear evidence.",
+      },
+    },
+  };
+}
+
+export function buildJevFillRequest(
+  thought: string,
+  residents: ResidentLite[],
+  excludedNames: string[]
+) {
+  const criteria = buildCriteria(residents);
+  const exclusion =
+    excludedNames.length > 0
+      ? ` Do NOT choose any of these residents: ${excludedNames.join(", ")}.`
+      : "";
+  const ask = (angle: string) =>
+    `${angle}${exclusion} Always choose one resident that is not excluded.`;
+
+  return {
+    model: process.env.JEV_MODEL?.trim() || "jev-latest",
+    state: thought,
+    questions: {
+      fill_1: {
+        type: "choice",
+        instructions: ask(
+          "Which resident is often active together with the primary one?"
+        ),
+        criteria,
+      },
+      fill_2: {
+        type: "choice",
+        instructions: ask(
+          "Which resident quietly influences the primary one from the background?"
+        ),
+        criteria,
+      },
+      fill_3: {
+        type: "choice",
+        instructions: ask(
+          "Which resident sits on the opposite side - the one the primary pushes against or learns from?"
+        ),
+        criteria,
       },
     },
   };
@@ -127,6 +196,31 @@ function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+/** Pull distinct surrounder names out of any Jev body (primary or fill pass). */
+function collectSurrounderNames(
+  body: unknown,
+  residents: ResidentLite[],
+  excludedSlugs: Set<string>,
+  excludedNames: Set<string>
+) {
+  const answers = extractAnswers(body);
+  if (!answers) return [];
+  const bySlug = new Map(
+    residents.map((resident) => [slugifyResident(resident.name), resident])
+  );
+  const names: string[] = [];
+  for (const key of Object.keys(answers)) {
+    if (!key.startsWith("surrounding") && !key.startsWith("fill")) continue;
+    const choice = answers[key]?.choice;
+    if (!choice || choice === "none") continue;
+    const resident = bySlug.get(choice);
+    if (!resident) continue;
+    if (excludedSlugs.has(choice) || excludedNames.has(resident.name)) continue;
+    if (!names.includes(resident.name)) names.push(resident.name);
+  }
+  return names;
+}
+
 export function mapJevResponse(
   body: unknown,
   residents: ResidentLite[],
@@ -156,24 +250,14 @@ export function mapJevResponse(
   );
 
   const secondary: { name: string; confidence: number }[] = [];
-  const secondaryAnswer = answers.secondary_resident;
-  if (secondaryAnswer?.choice && secondaryAnswer.choice !== "none") {
-    const resident = bySlug.get(secondaryAnswer.choice);
-    if (resident && resident.id !== primary.id) {
-      secondary.push({
-        name: resident.name,
-        confidence: round2(
-          clamp(
-            secondaryAnswer.probabilities?.[secondaryAnswer.choice] ??
-              secondaryAnswer.confidence ??
-              0.4,
-            0.05,
-            0.95
-          )
-        ),
-      });
-    }
-  }
+
+  // Surrounding residents: deduped, never the primary itself.
+  const neighborNames = collectSurrounderNames(
+    body,
+    residents,
+    new Set([primaryAnswer.choice ?? ""]),
+    new Set([primary.name])
+  );
 
   const action = isAction(answers.suggested_action?.choice)
     ? (answers.suggested_action?.choice as SuggestedAction)
@@ -193,7 +277,7 @@ export function mapJevResponse(
     primary_resident: primary.name,
     confidence,
     secondary_residents: secondary,
-    neighbors: [],
+    neighbors: neighborNames,
     suggested_action: action,
     reasoning,
   };
@@ -203,18 +287,9 @@ export function mapJevResponse(
 // Call
 // ---------------------------------------------------------------------------
 
-/** Returns null when Jev is unavailable so the engine can fall back. */
-export async function analyzeWithJev(
-  thought: string,
-  residents: ResidentLite[]
-): Promise<Prediction | null> {
-  const apiKey = process.env.JEV_API_KEY?.trim();
-  if (!apiKey) return null;
-
-  const endpoint = resolveJevEndpoint(apiKey);
+async function callJev(payload: unknown, endpoint: string, apiKey: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
-
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -222,7 +297,7 @@ export async function analyzeWithJev(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(buildJevRequest(thought, residents)),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
 
@@ -236,16 +311,59 @@ export async function analyzeWithJev(
       return null;
     }
 
-    const body = await response.json();
-    const prediction = mapJevResponse(body, residents, thought);
-    if (!prediction) {
-      console.warn("[village] Jev returned an unmappable response.");
-    }
-    return prediction;
+    return await response.json();
   } catch (error) {
     console.warn("[village] Jev request failed:", error);
     return null;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Returns null when Jev is unavailable so the engine can fall back. */
+export async function analyzeWithJev(
+  thought: string,
+  residents: ResidentLite[]
+): Promise<Prediction | null> {
+  const apiKey = process.env.JEV_API_KEY?.trim();
+  if (!apiKey) return null;
+  const endpoint = resolveJevEndpoint(apiKey);
+
+  const body = await callJev(
+    buildJevRequest(thought, residents),
+    endpoint,
+    apiKey
+  );
+  if (!body) return null;
+
+  const prediction = mapJevResponse(body, residents, thought);
+  if (!prediction) {
+    console.warn("[village] Jev returned an unmappable response.");
+    return null;
+  }
+
+  // The four surrounding questions are evaluated in parallel, so Jev can
+  // repeat the same resident. Follow-up "fill" calls explicitly exclude the
+  // already chosen names until the circle has four distinct residents.
+  let attempts = 0;
+  while (prediction.neighbors.length < 4 && attempts < 2) {
+    attempts += 1;
+    const chosen = [prediction.primary_resident, ...prediction.neighbors];
+    const fillBody = await callJev(
+      buildJevFillRequest(thought, residents, chosen),
+      endpoint,
+      apiKey
+    );
+    if (!fillBody) break;
+    const extra = collectSurrounderNames(
+      fillBody,
+      residents,
+      new Set(chosen.map(slugifyResident)),
+      new Set(chosen)
+    );
+    if (extra.length === 0) break;
+    prediction.neighbors = [...prediction.neighbors, ...extra].slice(0, 4);
+  }
+
+  return prediction;
 }

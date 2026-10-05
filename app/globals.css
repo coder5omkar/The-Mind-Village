@@ -120,21 +120,6 @@
   .scroll-input {
     @apply rounded-xl border-2 border-black/50 bg-[#0d1526]/90 shadow-[inset_0_2px_8px_rgba(0,0,0,0.5)];
   }
-
-  /* Map: name plates and power bars fade away when zoomed far out so the
-     villager portraits stay readable at every zoom level. */
-  .villager-name,
-  .villager-power {
-    transition: opacity 0.25s ease, transform 0.25s ease;
-  }
-  .map-far .villager-name,
-  .map-far .villager-power {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  .map-far .react-flow__handle {
-    opacity: 0;
-  }
 }
 
 @layer utilities {

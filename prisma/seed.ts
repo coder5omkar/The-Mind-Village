@@ -1,4 +1,4 @@
-import { PrismaClient, type Prisma } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -10,7 +10,9 @@ type SeedResident = {
 };
 
 // ---------------------------------------------------------------------------
-// The complete village - 79 residents across 11 districts
+// The complete village - 79 residents across 11 districts.
+// Relationships are NOT predefined: every user builds their own village by
+// agreeing (or disagreeing) with the surrounding residents Jev suggests.
 // ---------------------------------------------------------------------------
 
 const RESIDENTS: SeedResident[] = [
@@ -116,26 +118,6 @@ const RESIDENTS: SeedResident[] = [
   { name: "The Free One", district: "Higher", function: "Unbound", shadow: "" },
 ];
 
-// Districts that naturally bleed into one another. Cross-district residents
-// are connected at moderate strength so the village feels like one organism.
-const RELATED_DISTRICTS: [string, string][] = [
-  ["Cognitive", "Professional"],
-  ["Cognitive", "Creative"],
-  ["Cognitive", "Higher"],
-  ["Professional", "Money"],
-  ["Professional", "Destructive"],
-  ["Money", "Primal"],
-  ["Money", "Relational"],
-  ["Relational", "Emotional"],
-  ["Relational", "Spiritual"],
-  ["Emotional", "Body"],
-  ["Emotional", "Destructive"],
-  ["Body", "Primal"],
-  ["Primal", "Destructive"],
-  ["Creative", "Spiritual"],
-  ["Spiritual", "Higher"],
-];
-
 function lowerFirst(text: string) {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
@@ -151,7 +133,8 @@ function buildDescription(r: SeedResident) {
 async function main() {
   console.log("Seeding The Village...");
 
-  // 1. Residents (idempotent upsert by name)
+  // Residents only. No predefined relationships - each user's bonds are
+  // earned through readings and their own agree/disagree choices.
   for (const r of RESIDENTS) {
     const description = buildDescription(r);
     await prisma.resident.upsert({
@@ -166,56 +149,11 @@ async function main() {
     });
   }
 
-  const all = await prisma.resident.findMany();
-  const byDistrict = new Map<string, typeof all>();
-  for (const resident of all) {
-    const list = byDistrict.get(resident.district) ?? [];
-    list.push(resident);
-    byDistrict.set(resident.district, list);
-  }
-
-  // 2. Neighborhoods - rebuild from scratch so the graph is always consistent
+  // Clean out any predefined relationships from older seeds.
   await prisma.neighborhood.deleteMany({});
 
-  const seen = new Set<string>();
-  const ops: Prisma.PrismaPromise<unknown>[] = [];
-
-  const connect = (aId: string, bId: string, strength: number) => {
-    const [x, y] = [aId, bId].sort();
-    const key = `${x}::${y}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    ops.push(
-      prisma.neighborhood.create({
-        data: { residentAId: x, residentBId: y, strength },
-      })
-    );
-  };
-
-  // Same district -> strongly connected (0.8)
-  for (const list of byDistrict.values()) {
-    for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) {
-        connect(list[i].id, list[j].id, 0.8);
-      }
-    }
-  }
-
-  // Related districts -> moderately connected (0.4), two links per resident
-  for (const [districtA, districtB] of RELATED_DISTRICTS) {
-    const listA = byDistrict.get(districtA) ?? [];
-    const listB = byDistrict.get(districtB) ?? [];
-    if (!listA.length || !listB.length) continue;
-    listA.forEach((resident, i) => {
-      connect(resident.id, listB[i % listB.length].id, 0.4);
-      connect(resident.id, listB[(i + 3) % listB.length].id, 0.4);
-    });
-  }
-
-  await prisma.$transaction(ops);
-
   console.log(
-    `Seeded ${RESIDENTS.length} residents and ${ops.length} neighborhood links.`
+    `Seeded ${RESIDENTS.length} residents. Bonds are earned through readings.`
   );
 }
 

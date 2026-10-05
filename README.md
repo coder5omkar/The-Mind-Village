@@ -26,9 +26,13 @@ who leads.
   compassionate explanation. Earn XP for every reading.
 - **Feedback loop** - mark readings correct / partly / wrong and pick the real
   resident. The village learns and resident power shifts.
-- **Village map** - a React Flow board of all 79 residents across 11 districts.
-  Active residents glow with ✨; click any villager for details and their
-  recent thoughts.
+- **Village map** - a React Flow board of all 79 residents across 11 vertical
+  lanes. Active residents glow with ✨; click any villager for details and their
+  circle.
+- **A village that is yours alone** - there are no predefined relationships.
+  Jev suggests four surrounding residents for every reading, and you
+  **agree or disagree** with each one; only your agreed bonds appear on the map
+  and in the relations list.
 - **Analytics (Hall of Records)** - power trends over 14 days, top residents
   this week, reading accuracy, district activity, streak and awareness level.
 - **Works without an API key** - a built-in TypeScript prediction engine
@@ -104,8 +108,9 @@ npx prisma migrate dev --name init   # creates dev.db + runs the seed
 npm run db:seed                      # optional - re-run the seed any time
 ```
 
-The seed creates all **79 residents** and **486 neighborhood links**
-(strong within districts, moderate across related districts).
+The seed creates all **79 residents**. There are **no predefined
+relationships** - each user's village bonds are built by agreeing with the
+surrounding residents suggested for their own readings.
 
 ### 6. Run
 
@@ -139,10 +144,12 @@ deleted. Progress is never lost.
 
 1. **Jev by TypeSafe AI** (`lib/jev.ts`) - preferred. Jev is not a chat model:
    it takes a `state` (the thought) plus typed `questions` and returns typed,
-   calibrated answers with probabilities. The village asks four questions in
+   calibrated answers with probabilities. The village asks seven questions in
    one round trip:
    - `primary_resident` - a `choice` over all 79 residents
-   - `secondary_resident` - a `choice` over all residents + `none`
+   - `surrounding_1` ... `surrounding_4` - four `choice` questions (closest
+     neighbor, often pulled in, pushes/provokes, calms/balances), each over all
+     residents + `none`
    - `suggested_action` - a `choice` over increase/decrease/redirect/sleep
    - `safety_crisis` - a `noul` (calibrated yes/no) gate for self-harm language
 
@@ -159,10 +166,12 @@ deleted. Progress is never lost.
    lexicon for every resident.
 
 The reading is stored on the `Thought` record (with a `source` of `jev`,
-`deepseek` or `local` - shown on the result card), neighbors are merged with
-the strongest graph edges from the database, and resident power gets a small
-activity bump. Feedback (correct/partial/wrong) applies larger power
-adjustments so your village map reflects reality over time.
+`deepseek` or `local` - shown on the result card). The four surrounding
+residents are stored as `pending`; in the Hall chat you **agree** or
+**disagree** with each one (`POST /api/thoughts/:id/surrounders`). Agreed
+surrounders become real bonds in *your* village graph, and resident power gets
+a small bump. Feedback (correct/partial/wrong) applies larger power
+adjustments so your map reflects reality over time.
 
 A gentle safety note is appended to the reasoning if a thought mentions
 self-harm - either from keyword matching or from Jev's calibrated `noul` gate.

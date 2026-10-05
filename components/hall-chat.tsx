@@ -21,6 +21,13 @@ import { cn } from "@/lib/utils";
 
 type UserMessage = { id: string; role: "user"; text: string };
 
+type Surrounder = {
+  id?: string;
+  name: string;
+  district?: string;
+  status?: string;
+};
+
 type VillageMessage = {
   id: string;
   role: "village";
@@ -29,6 +36,7 @@ type VillageMessage = {
   confidence: number | null;
   action: string | null;
   reasoning: string | null;
+  surrounders: Surrounder[];
   feedback: string | null;
 };
 
@@ -85,6 +93,7 @@ export function HallChat({
             confidence: thought.confidence,
             action: thought.suggestedAction,
             reasoning: thought.reasoning,
+            surrounders: thought.neighbors ?? [],
             feedback: thought.feedback,
           });
         }
@@ -158,6 +167,7 @@ export function HallChat({
           confidence: result.thought.confidence,
           action: result.thought.suggestedAction,
           reasoning: result.thought.reasoning,
+          surrounders: result.thought.neighbors ?? [],
           feedback: null,
         },
       ]);
@@ -214,7 +224,7 @@ export function HallChat({
         className
       )}
     >
-      <div className="flex items-center justify-between border-b-2 border-black/40 px-3 py-2">
+      <div className="flex shrink-0 items-center justify-between border-b-2 border-black/40 px-3 py-2">
         <span className="flex items-center gap-2 font-display text-xs tracking-wide text-gold-200 [text-shadow:0_1px_0_rgba(0,0,0,0.5)]">
           <span className="text-base leading-none">💬</span> CHAT WITH THE VILLAGE
         </span>
@@ -283,6 +293,14 @@ export function HallChat({
                 {message.reasoning ? (
                   <p className="mt-1.5 font-serif text-[11px] italic leading-relaxed text-slate-300">
                     {message.reasoning}
+                  </p>
+                ) : null}
+
+                {message.surrounders.length > 0 ? (
+                  <p className="mt-2 text-[9px] font-bold text-slate-500">
+                    🔮 {message.surrounders.length} surrounding resident
+                    {message.surrounders.length === 1 ? "" : "s"} suggested -
+                    agree, disagree or skip them in the panel below the map.
                   </p>
                 ) : null}
 
@@ -391,7 +409,7 @@ export function HallChat({
 
       <form
         onSubmit={handleSubmit}
-        className="border-t-2 border-black/40 bg-[#0d1526]/50 p-2.5"
+        className="shrink-0 border-t-2 border-black/40 bg-[#0d1526]/50 p-2.5"
       >
         <Textarea
           value={text}

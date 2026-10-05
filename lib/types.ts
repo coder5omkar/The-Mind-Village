@@ -24,7 +24,12 @@ export type ThoughtItem = {
   primaryResident: ResidentSummary | null;
   correctedResident: ResidentSummary | null;
   secondaryResidents: { name: string; confidence: number }[];
-  neighbors: { id?: string; name: string; district?: string }[];
+  neighbors: {
+    id?: string;
+    name: string;
+    district?: string;
+    status?: string;
+  }[];
 };
 
 export type AnalyzeResponse = {

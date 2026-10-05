@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -37,7 +37,12 @@ import {
   districtColor,
   districtMeta,
 } from "@/lib/residents";
-import type { AnalyzeResponse, VillageNode, VillageResponse } from "@/lib/types";
+import type {
+  AnalyzeResponse,
+  ThoughtItem,
+  VillageNode,
+  VillageResponse,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -61,12 +66,6 @@ type DistrictLabelData = {
   count: number;
 };
 
-type IslandData = {
-  color: string;
-  emoji: string;
-  size: number;
-};
-
 type DecorData = {
   emoji: string;
   size: number;
@@ -74,17 +73,12 @@ type DecorData = {
 
 type ResidentFlowNode = Node<ResidentNodeData, "resident">;
 type DistrictFlowNode = Node<DistrictLabelData, "districtLabel">;
-type IslandFlowNode = Node<IslandData, "island">;
 type DecorFlowNode = Node<DecorData, "decor">;
-type VillageFlowNode =
-  | ResidentFlowNode
-  | DistrictFlowNode
-  | IslandFlowNode
-  | DecorFlowNode;
+type VillageFlowNode = ResidentFlowNode | DistrictFlowNode | DecorFlowNode;
 
 function ResidentNode({ data, selected }: NodeProps<ResidentFlowNode>) {
   const meta = districtMeta(data.district);
-  const size = 50 + data.power * 18;
+  const size = 52 + data.power * 14;
   const barColor =
     data.power > 0.66 ? "#8be36f" : data.power > 0.4 ? "#f4c542" : "#94a3b8";
 
@@ -142,7 +136,7 @@ function ResidentNode({ data, selected }: NodeProps<ResidentFlowNode>) {
           }}
         />
       </div>
-      <span className="villager-name max-w-full truncate rounded-md border border-black/40 bg-black/50 px-1.5 py-0.5 text-center text-[10px] font-bold text-slate-100">
+      <span className="villager-name max-w-full truncate rounded-md border border-black/40 bg-black/50 px-1.5 py-0.5 text-center text-[11px] font-bold text-slate-100">
         {data.name}
       </span>
       <Handle
@@ -156,16 +150,16 @@ function ResidentNode({ data, selected }: NodeProps<ResidentFlowNode>) {
 
 function DistrictLabelNode({ data }: NodeProps<DistrictFlowNode>) {
   return (
-    <div className="pointer-events-none w-[250px] select-none text-center">
+    <div className="pointer-events-none w-[124px] select-none text-center">
       <div
-        className="inline-flex items-center gap-2 rounded-xl border-2 border-black/50 px-3.5 py-1.5 shadow-[0_3px_0_rgba(0,0,0,0.35)]"
+        className="inline-flex items-center gap-1.5 rounded-xl border-2 border-black/50 px-2.5 py-1 shadow-[0_3px_0_rgba(0,0,0,0.35)]"
         style={{
           backgroundImage: `linear-gradient(180deg, ${data.color}66, ${data.color}22)`,
         }}
       >
         <span className="text-lg">{data.emoji}</span>
         <span
-          className="font-display text-sm uppercase tracking-[0.18em] text-white"
+          className="font-display text-[11px] uppercase tracking-[0.12em] text-white"
           style={{ textShadow: "0 2px 0 rgba(0,0,0,0.5)" }}
         >
           {data.district}
@@ -174,26 +168,6 @@ function DistrictLabelNode({ data }: NodeProps<DistrictFlowNode>) {
           {data.count}
         </span>
       </div>
-    </div>
-  );
-}
-
-/** A circular "island" - no more square boxes. */
-function IslandNode({ data }: NodeProps<IslandFlowNode>) {
-  return (
-    <div
-      className="pointer-events-none relative select-none rounded-full"
-      style={{
-        width: data.size,
-        height: data.size,
-        background: `radial-gradient(circle, ${data.color}33 0%, ${data.color}1c 42%, ${data.color}0a 66%, transparent 76%)`,
-        border: `3px dashed ${data.color}55`,
-        boxShadow: `inset 0 0 90px ${data.color}1f`,
-      }}
-    >
-      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[120px] opacity-[0.13]">
-        {data.emoji}
-      </span>
     </div>
   );
 }
@@ -212,24 +186,30 @@ function DecorNode({ data }: NodeProps<DecorFlowNode>) {
 const nodeTypes = {
   resident: ResidentNode,
   districtLabel: DistrictLabelNode,
-  island: IslandNode,
   decor: DecorNode,
 };
 
 // ---------------------------------------------------------------------------
-// Layout: a honeycomb world map of circular islands. Inside each island the
-// residents sit on a winding candy path (snake layout).
+// Layout: vertical candy-crush lanes side by side. Each district is one lane
+// that winds down (or up) the map, and the lanes connect end-to-end into a
+// single snaking journey - like real village lanes.
 // ---------------------------------------------------------------------------
 
 const DECOR_EMOJI = ["🌲", "🌳", "🪨", "🏕️", "🌾", "⛰️", "🌲", "🪨"];
 
 type DistrictBounds = { x: number; y: number; width: number; height: number };
-type PathLink = { source: string; target: string };
+type PathLink = { source: string; target: string; connector?: boolean };
 
 function seeded(index: number, salt: number) {
   const value = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453;
   return value - Math.floor(value);
 }
+
+const LANE_SPACING_X = 145; // distance between lanes (center to center)
+const LANE_SPACING_Y = 102; // distance between residents along a lane
+const LANE_BAND_WIDTH = 124;
+const LANE_ENTRY_OFFSET = 120;
+const LANE_WAVE = 14;
 
 function buildLayout(nodes: VillageNode[]) {
   const byDistrict = new Map<string, VillageNode[]>();
@@ -240,10 +220,12 @@ function buildLayout(nodes: VillageNode[]) {
   }
 
   const districts = DISTRICT_ORDER.filter((district) => byDistrict.has(district));
-  const worldCols = 4;
-  const worldSpacingX = 500;
-  const worldSpacingY = 480;
-  const worldRows = Math.ceil(districts.length / worldCols);
+  const maxCount = Math.max(
+    1,
+    ...districts.map((district) => (byDistrict.get(district) ?? []).length)
+  );
+  const laneHeight = LANE_ENTRY_OFFSET * 2 + (maxCount - 1) * LANE_SPACING_Y;
+  const totalWidth = districts.length * LANE_SPACING_X;
 
   const flowNodes: VillageFlowNode[] = [];
   const boundsByDistrict = new Map<string, DistrictBounds>();
@@ -251,60 +233,30 @@ function buildLayout(nodes: VillageNode[]) {
   const pathLinks: PathLink[] = [];
 
   districts.forEach((district, districtIndex) => {
-    const col = districtIndex % worldCols;
-    const row = Math.floor(districtIndex / worldCols);
-    const cx =
-      (col - (worldCols - 1) / 2) * worldSpacingX +
-      (row % 2 === 1 ? worldSpacingX / 2 : 0);
-    const cy = (row - (worldRows - 1) / 2) * worldSpacingY;
-
     const list = byDistrict.get(district) ?? [];
     const meta = districtMeta(district);
-    const cols = Math.min(3, Math.ceil(Math.sqrt(list.length)));
-    const spacingX = 86;
-    const spacingY = 92;
-    const rows = Math.ceil(list.length / cols);
-    const islandRadius = Math.max(cols * spacingX, rows * spacingY) / 2 + 62;
+    // Serpentine: lanes alternate top->bottom and bottom->top, and the road
+    // connects them end to end like a real village lane.
+    const direction = districtIndex % 2 === 0 ? 1 : -1;
+    const laneX =
+      -totalWidth / 2 + LANE_SPACING_X / 2 + districtIndex * LANE_SPACING_X;
+    const entryY =
+      direction === 1
+        ? -laneHeight / 2 + LANE_ENTRY_OFFSET
+        : laneHeight / 2 - LANE_ENTRY_OFFSET;
 
-    boundsByDistrict.set(district, {
-      x: cx - islandRadius - 30,
-      y: cy - islandRadius - 100,
-      width: islandRadius * 2 + 60,
-      height: islandRadius * 2 + 140,
-    });
-
-    // Circular island under the district
-    flowNodes.push({
-      id: `island-${district}`,
-      type: "island",
-      position: { x: cx - islandRadius, y: cy - islandRadius },
-      data: {
-        color: meta.color,
-        emoji: meta.emoji,
-        size: islandRadius * 2,
-      },
-      selectable: false,
-      draggable: false,
-      zIndex: 0,
-    });
-
-    // Winding snake path of residents (candy-crush style)
+    // Residents snake down (or up) the lane
     const ordered: VillageNode[] = [];
     list.forEach((node, index) => {
-      const pathRow = Math.floor(index / cols);
-      const rawCol = index % cols;
-      const pathCol = pathRow % 2 === 0 ? rawCol : cols - 1 - rawCol;
-      const wobble = Math.sin(pathRow * 1.7) * 10;
-      const position = {
-        x: cx + (pathCol - (cols - 1) / 2) * spacingX + wobble,
-        y: cy + (pathRow - (rows - 1) / 2) * spacingY,
-      };
-      positionById.set(node.id, position);
+      const x =
+        laneX + Math.sin(index * 0.85 + districtIndex * 1.1) * LANE_WAVE;
+      const y = entryY + direction * index * LANE_SPACING_Y;
+      positionById.set(node.id, { x, y });
       ordered.push(node);
       flowNodes.push({
         id: node.id,
         type: "resident",
-        position,
+        position: { x, y },
         data: {
           name: node.name,
           district: node.district,
@@ -316,15 +268,19 @@ function buildLayout(nodes: VillageNode[]) {
       });
     });
 
-    // Consecutive residents on the snake become trail links
+    // Consecutive residents on the lane become road links
     for (let i = 0; i < ordered.length - 1; i++) {
       pathLinks.push({ source: ordered[i].id, target: ordered[i + 1].id });
     }
 
+    // Lane name sign, always at the top of the column
     flowNodes.push({
       id: `district-${district}`,
       type: "districtLabel",
-      position: { x: cx - 125, y: cy - islandRadius - 74 },
+      position: {
+        x: laneX - LANE_BAND_WIDTH / 2,
+        y: -laneHeight / 2 - 48,
+      },
       data: {
         district,
         color: meta.color,
@@ -335,22 +291,45 @@ function buildLayout(nodes: VillageNode[]) {
       draggable: false,
       zIndex: 6,
     });
+
+    boundsByDistrict.set(district, {
+      x: laneX - LANE_BAND_WIDTH / 2 - 20,
+      y: -laneHeight / 2 - 20,
+      width: LANE_BAND_WIDTH + 40,
+      height: laneHeight + 40,
+    });
   });
 
-  // Scatter decorations around the world
+  // Connect the lanes into one continuous journey.
+  for (let i = 0; i < districts.length - 1; i++) {
+    const current = byDistrict.get(districts[i]) ?? [];
+    const next = byDistrict.get(districts[i + 1]) ?? [];
+    if (current.length && next.length) {
+      pathLinks.push({
+        source: current[current.length - 1].id,
+        target: next[0].id,
+        connector: true,
+      });
+    }
+  }
+
+  // Decorations hug the edges of the lane world.
+  const mapHalfW = totalWidth / 2 + LANE_BAND_WIDTH / 2 + 60;
+  const mapHalfH = laneHeight / 2 + 60;
   for (let i = 0; i < 44; i++) {
-    const angle = (i / 44) * Math.PI * 2 + seeded(i, 1) * 0.35;
-    const decorRadius = 1180 + seeded(i, 2) * 380;
+    const angle = (i / 44) * Math.PI * 2 + seeded(i, 1) * 0.3;
+    const rx = mapHalfW + 30 + seeded(i, 2) * 150;
+    const ry = mapHalfH + 20 + seeded(i, 3) * 130;
     flowNodes.push({
       id: `decor-${i}`,
       type: "decor",
       position: {
-        x: Math.cos(angle) * decorRadius,
-        y: Math.sin(angle) * decorRadius * 0.72,
+        x: Math.cos(angle) * rx,
+        y: Math.sin(angle) * ry,
       },
       data: {
         emoji: DECOR_EMOJI[i % DECOR_EMOJI.length],
-        size: 24 + Math.round(seeded(i, 3) * 16),
+        size: 24 + Math.round(seeded(i, 4) * 16),
       },
       selectable: false,
       draggable: false,
@@ -381,7 +360,7 @@ function buildEdges(
   const result: Edge[] = [];
   const hasSelection = Boolean(selectedId);
 
-  // Candy trails inside each island - hidden while a villager is selected so
+  // The dotted road - hidden while a villager is selected so
   // only the real relations stay on screen.
   if (lens === "paths" && !hasSelection) {
     for (const link of pathLinks) {
@@ -393,13 +372,22 @@ function buildEdges(
         source: link.source,
         target: link.target,
         type: "default",
-        style: {
-          stroke: color,
-          strokeWidth: near ? 4 : 3,
-          strokeDasharray: "0.1 11",
-          strokeLinecap: "round",
-          opacity: near ? 0.9 : 0.5,
-        },
+        style: link.connector
+          ? {
+              // quiet link between two lanes
+              stroke: color,
+              strokeWidth: 3,
+              strokeDasharray: "2 9",
+              strokeLinecap: "round",
+              opacity: 0.25,
+            }
+          : {
+              stroke: color,
+              strokeWidth: near ? 8 : 7,
+              strokeDasharray: "0.1 15",
+              strokeLinecap: "round",
+              opacity: near ? 0.9 : 0.7,
+            },
         zIndex: 1,
       });
     }
@@ -487,17 +475,25 @@ function VillageBoard({
   const reactFlow = useReactFlow();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lens, setLens] = useState<Lens>("paths");
-  const [view, setView] = useState<"map" | "hall">("map");
+  const [view, setView] = useState<"map" | "hall">("hall");
   const [activeDistrict, setActiveDistrict] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [far, setFar] = useState(false);
   const [lastResult, setLastResult] = useState<AnalyzeResponse | null>(null);
   const [hoveredRelation, setHoveredRelation] = useState<string | null>(null);
-  const farRef = useRef(false);
+  const [savingSurrounder, setSavingSurrounder] = useState<string | null>(null);
 
   const { flowNodes, boundsByDistrict, positionById, pathLinks } = useMemo(
     () => buildLayout(data.nodes),
     [data.nodes]
+  );
+
+  // Fit the lanes and villagers, not the decorative forest.
+  const fitNodes = useMemo(
+    () =>
+      flowNodes
+        .filter((node) => node.type !== "decor")
+        .map((node) => ({ id: node.id })),
+    [flowNodes]
   );
 
   const nodesById = useMemo(
@@ -631,7 +627,11 @@ function VillageBoard({
     const bounds = boundsByDistrict.get(district);
     if (!bounds) return;
     setActiveDistrict(district);
-    reactFlow.fitBounds(bounds, { duration: 700, padding: 0.2 });
+    reactFlow.setCenter(
+      bounds.x + bounds.width / 2,
+      bounds.y + bounds.height / 2,
+      { zoom: 1.6, duration: 700 }
+    );
   }
 
   function flyToResident(query: string) {
@@ -676,6 +676,38 @@ function VillageBoard({
     }
   }
 
+  // Agree/disagree with a Jev-suggested surrounder right from the map panel.
+  // The choice is saved and becomes (or stays out of) the user's village.
+  async function decideSurrounder(
+    thoughtId: string,
+    residentId: string,
+    status: "agreed" | "rejected" | "unsure"
+  ) {
+    setSavingSurrounder(residentId);
+    try {
+      const response = await fetch(`/api/thoughts/${thoughtId}/surrounders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ residentId, status }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Could not save your choice.");
+      }
+      const updated = data.thought as ThoughtItem;
+      setLastResult((previous) =>
+        previous && previous.thought.id === thoughtId
+          ? { ...previous, thought: updated }
+          : previous
+      );
+      onRefresh();
+    } catch {
+      // Errors surface in the Hall chat; the map keeps its state.
+    } finally {
+      setSavingSurrounder(null);
+    }
+  }
+
   const switcherClass = (active: boolean) =>
     cn(
       "rounded-xl border-2 border-b-4 px-2 py-1.5 font-display text-xs uppercase tracking-wide transition-all duration-100 active:translate-y-[2px] active:border-b-2",
@@ -698,7 +730,7 @@ function VillageBoard({
             </h1>
             <p className="text-sm font-semibold text-slate-400 lg:text-xs">
               {view === "map"
-                ? "Follow the trails between islands - ✨ means they spoke this week."
+                ? "Follow the lane through all eleven districts - ✨ means they spoke this week."
                 : "Chat with the village - the map stays awake beside you."}
             </p>
           </div>
@@ -766,7 +798,7 @@ function VillageBoard({
             <div className="flex items-center gap-1 rounded-xl border-2 border-black/40 bg-[#0d1526]/80 p-1 lg:w-full lg:justify-center">
               <button
                 onClick={() => setLens("paths")}
-                title="Candy trails inside each island"
+                title="The dotted road through each district"
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-bold transition",
                   lens === "paths"
@@ -863,29 +895,17 @@ function VillageBoard({
 
       {/* Main stage: the map always stays, with the outcome frame below */}
       <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2 lg:col-start-2 lg:row-span-4 lg:row-start-1 lg:mt-0">
-        <div
-          className={cn(
-            "grass-field relative min-h-[240px] flex-1 overflow-hidden rounded-3xl border-4 border-black/50 shadow-[0_10px_30px_rgba(0,0,0,0.5)]",
-            far && "map-far"
-          )}
-        >
+        <div className="grass-field relative min-h-[240px] flex-1 overflow-hidden rounded-3xl border-4 border-black/50 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
           <ReactFlow
             nodes={styledNodes}
             edges={styledEdges}
             nodeTypes={nodeTypes}
             fitView
-            fitViewOptions={{ padding: 0.06 }}
+            fitViewOptions={{ padding: 0.08, nodes: fitNodes }}
             minZoom={0.1}
-            maxZoom={2}
+            maxZoom={2.5}
             nodesDraggable={false}
             nodesConnectable={false}
-            onMove={(_, viewport) => {
-              const nextFar = viewport.zoom < 0.4;
-              if (nextFar !== farRef.current) {
-                farRef.current = nextFar;
-                setFar(nextFar);
-              }
-            }}
             onNodeClick={(_, node) => {
               if (node.type === "resident") {
                 setSelectedId(node.id);
@@ -918,7 +938,7 @@ function VillageBoard({
         </div>
 
         {/* Outcome frame - selected villager + every relation, below the map */}
-        <div className="game-panel-gold flex h-[196px] shrink-0 flex-col gap-2 overflow-hidden p-3 sm:h-[212px] sm:flex-row sm:gap-3">
+        <div className="game-panel-gold flex h-[238px] shrink-0 flex-col gap-2 overflow-hidden p-3 sm:h-[224px] sm:flex-row sm:gap-3">
           {selected ? (
             <>
               {/* Identity */}
@@ -968,19 +988,133 @@ function VillageBoard({
                 </div>
               </div>
 
-              {/* Every relation, numbered like the lines on the map */}
+              {/* Jev's suggested surrounders + the agreed bonds */}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                    🔗 Relations - {relations.length} bonds ·{" "}
+                    🔮 Jev suggests - agree to add them to your circle
+                  </p>
+                  <span className="hidden text-[9px] font-bold text-slate-500 md:block">
+                    your choices build your village
+                  </span>
+                </div>
+                {!selectedThought ? (
+                  <p className="mt-1 text-[10px] font-bold text-slate-500">
+                    No reading for this villager yet - ask in the Council Hall.
+                  </p>
+                ) : (selectedThought.neighbors ?? []).length === 0 ? (
+                  <p className="mt-1 text-[10px] font-bold text-slate-500">
+                    Jev found no surrounding residents in the latest reading.
+                  </p>
+                ) : (
+                  <div className="mt-1 flex shrink-0 gap-2 overflow-x-auto pb-1">
+                    {(selectedThought.neighbors ?? []).map((surrounder) => (
+                      <div
+                        key={surrounder.id ?? surrounder.name}
+                        className="w-[214px] shrink-0 rounded-xl border-2 border-black/40 bg-[#0d1526]/70 p-2"
+                      >
+                        <div className="flex items-center gap-2">
+                          <VillagerPortrait
+                            name={surrounder.name}
+                            district={surrounder.district ?? ""}
+                            size={30}
+                            frame={false}
+                          />
+                          <p className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-200">
+                            {surrounder.name}
+                          </p>
+                          {surrounder.status === "agreed" ? (
+                            <span className="shrink-0 text-[9px] font-bold text-emerald-300">
+                              ✓ in your village
+                            </span>
+                          ) : surrounder.status === "rejected" ? (
+                            <span className="shrink-0 text-[9px] font-bold text-slate-500">
+                              ✗ not yours
+                            </span>
+                          ) : surrounder.status === "unsure" ? (
+                            <span className="shrink-0 text-[9px] font-bold text-amber-200">
+                              🤔 not sure yet
+                            </span>
+                          ) : null}
+                        </div>
+                        {surrounder.status !== "agreed" &&
+                        surrounder.status !== "rejected" ? (
+                          <div className="mt-1 flex gap-1">
+                            <Button
+                              variant="success"
+                              size="sm"
+                              className="h-6 flex-1 px-1 text-[10px]"
+                              disabled={savingSurrounder === surrounder.id}
+                              onClick={() =>
+                                surrounder.id &&
+                                selectedThought &&
+                                decideSurrounder(
+                                  selectedThought.id,
+                                  surrounder.id,
+                                  "agreed"
+                                )
+                              }
+                            >
+                              Agree
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="h-6 flex-1 px-1 text-[10px]"
+                              disabled={savingSurrounder === surrounder.id}
+                              onClick={() =>
+                                surrounder.id &&
+                                selectedThought &&
+                                decideSurrounder(
+                                  selectedThought.id,
+                                  surrounder.id,
+                                  "rejected"
+                                )
+                              }
+                            >
+                              Disagree
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="h-6 flex-1 px-1 text-[10px]"
+                              disabled={savingSurrounder === surrounder.id}
+                              onClick={() =>
+                                surrounder.id &&
+                                selectedThought &&
+                                decideSurrounder(
+                                  selectedThought.id,
+                                  surrounder.id,
+                                  "unsure"
+                                )
+                              }
+                            >
+                              Not sure
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                    🔗 In your village - {relations.length} bonds ·{" "}
                     {relationDistrictCount} districts
                   </p>
                   <span className="hidden text-[9px] font-bold text-slate-500 md:block">
                     hover to trace - click to travel
                   </span>
                 </div>
-                <div className="mt-1.5 flex min-h-0 flex-1 gap-2 overflow-x-auto pb-1">
-                  {relations.map((relation, index) => (
+                {relations.length === 0 ? (
+                  <p className="mt-1 text-[10px] font-bold leading-relaxed text-slate-500">
+                    No agreed bonds yet - agree with a suggestion above to build
+                    this villager&apos;s circle.
+                  </p>
+                ) : (
+                  <div className="mt-1.5 flex min-h-0 flex-1 gap-2 overflow-x-auto pb-1">
+                    {relations.map((relation, index) => (
                     <button
                       key={relation.resident.id}
                       onClick={() => travelTo(relation.resident.id)}
@@ -1015,7 +1149,7 @@ function VillageBoard({
                           <span className="truncate text-[9px] font-bold text-slate-500">
                             {relation.cross
                               ? relation.resident.district
-                              : "same island"}
+                              : "same district"}
                           </span>
                         </div>
                         <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-black/40">
@@ -1031,8 +1165,9 @@ function VillageBoard({
                         </div>
                       </div>
                     </button>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Latest reading */}
